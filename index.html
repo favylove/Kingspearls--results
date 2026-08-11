@@ -1510,8 +1510,12 @@ function renderSubjectCheckboxes(){
   if(!cls||!tid){document.getElementById("assign-empty").style.display="block";document.getElementById("assign-wrap").style.display="none";return;}
   document.getElementById("assign-empty").style.display="none";
   document.getElementById("assign-wrap").style.display="block";
-  document.getElementById("assign-heading").textContent=document.getElementById("assign-teacher").selectedOptions[0]?.text+" — "+cls;
-  const subs=getSubs(cls);
+  const isSSS=cls.toLowerCase().includes("sss");
+  document.getElementById("assign-dept-wrap").style.display=isSSS?"block":"none";
+  const dept=document.getElementById("assign-dept").value;
+  if(isSSS && !dept){document.getElementById("assign-empty").style.display="block";document.getElementById("assign-wrap").style.display="none";return;}
+  document.getElementById("assign-heading").textContent=document.getElementById("assign-teacher").selectedOptions[0]?.text+" — "+cls+(isSSS?" ("+dept+")":"");
+  const subs=getSubs(cls,dept);
   const wrap=document.getElementById("subject-checkboxes");
   wrap.innerHTML="";
   // load existing
