@@ -592,6 +592,15 @@ tr:nth-child(even) td{background:#F8FAFF;}
             <option value="">— Select Class —</option>
           </select>
         </div>
+        <div class="fg" id="assign-dept-wrap" style="display:none">
+          <label class="lbl">Department (SSS only)</label>
+          <select id="assign-dept" onchange="renderSubjectCheckboxes()">
+            <option value="">— Select Department —</option>
+            <option value="Sciences">Sciences</option>
+            <option value="Humanities">Humanities</option>
+            <option value="Business">Business</option>
+          </select>
+        </div>
       </div>
     </div>
     <div id="assign-empty" class="card" style="text-align:center;padding:40px;color:var(--slate)">
