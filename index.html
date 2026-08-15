@@ -34,10 +34,11 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#F0F4FF;color:#1E
 .card-title{font-weight:700;color:var(--navy);font-size:15px;margin-bottom:14px;}
 
 label.lbl{font-size:12px;font-weight:600;color:var(--slate);display:block;margin-bottom:5px;}
-input,select,textarea{width:100%;border:1px solid var(--border);border-radius:8px;
+input:not([type="checkbox"]):not([type="radio"]),select,textarea{width:100%;border:1px solid var(--border);border-radius:8px;
   padding:10px 12px;font-size:14px;color:#1E293B;background:#fff;outline:none;
   -webkit-appearance:none;appearance:none;font-family:inherit;}
 input:focus,select:focus,textarea:focus{border-color:var(--royal);box-shadow:0 0 0 3px rgba(26,58,143,.1);}
+input[type="checkbox"],input[type="radio"]{accent-color:var(--royal);width:auto;}
 textarea{resize:vertical;min-height:70px;}
 .fg{margin-bottom:13px;}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
@@ -434,7 +435,47 @@ tr:nth-child(even) td{background:#F8FAFF;}
 <div class="page" id="page-students">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="font-weight:800;font-size:19px;color:var(--navy)">Students</div>
-    <button class="btn btn-gold btn-sm" onclick="toggleAddForm()">+ Add Student</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="togglePromoteForm()">🎓 Promote Students</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleBulkPhotoForm()">📸 Bulk Upload Photos</button>
+      <button class="btn btn-gold btn-sm" onclick="toggleAddForm()">+ Add Student</button>
+    </div>
+  </div>
+  <div id="promote-form" class="card" style="display:none;border:2px solid var(--purple);margin-bottom:14px">
+    <div class="card-title">🎓 Promote Students to New Class/Session</div>
+    <div style="font-size:12px;color:var(--slate);margin-bottom:14px">
+      Move a whole class up (e.g. Basic 9A → SSS 1). Pick the current class, set the new class name, and optionally set a default department for everyone — then fix individual students who differ before applying.
+    </div>
+    <div class="g2">
+      <div class="fg"><label class="lbl">Current Class</label>
+        <select id="promote-from-class" onchange="renderPromoteList()">
+          <option value="">— Select Class —</option>
+        </select>
+      </div>
+      <div class="fg"><label class="lbl">New Class Name</label>
+        <input type="text" id="promote-to-class" placeholder="e.g. SSS 1"/>
+      </div>
+    </div>
+    <div class="fg"><label class="lbl">Default Department for Everyone (optional)</label>
+      <select id="promote-default-dept" onchange="renderPromoteList()">
+        <option value="__keep__">— Keep each student's existing department —</option>
+        <option value="">— Clear department (no department) —</option>
+        <option value="Sciences">Sciences</option>
+        <option value="Humanities">Humanities</option>
+        <option value="Business">Business</option>
+      </select>
+    </div>
+    <div id="promote-list" style="margin:14px 0;display:flex;flex-direction:column;gap:6px"></div>
+    <button class="btn btn-gold" id="promote-apply-btn" onclick="applyPromotion()" style="display:none;width:100%">✅ Apply Promotion to Selected Students</button>
+  </div>
+  <div id="bulk-photo-form" class="card" style="display:none;border:2px solid var(--royal);margin-bottom:14px">
+    <div class="card-title">Bulk Upload Photos</div>
+    <div style="font-size:12px;color:var(--slate);margin-bottom:12px">
+      Name each photo file after the student, e.g. <b>AKUBUE SOFIA CHINOYELUM.jpg</b>. We'll try to match each photo to a student automatically by name — you can fix any that don't match before saving.
+    </div>
+    <input type="file" id="bulk-photo-input" accept="image/*" multiple onchange="handleBulkPhotoFiles(event)"/>
+    <div id="bulk-photo-preview" style="margin-top:14px;display:flex;flex-direction:column;gap:10px"></div>
+    <button class="btn btn-gold" id="bulk-photo-save-btn" onclick="saveBulkPhotos()" style="display:none;margin-top:14px;width:100%">💾 Save All Matched Photos</button>
   </div>
   <div id="add-form" class="card" style="display:none;border:2px solid var(--gold)">
     <div class="card-title">Add Student(s)</div>
@@ -488,9 +529,10 @@ tr:nth-child(even) td{background:#F8FAFF;}
   <div id="students-loading" class="card loading-row">Loading students…</div>
   <div class="card" style="padding:0;display:none" id="students-tbl-card">
     <div class="tbl-wrap"><table>
-      <thead><tr><th>#</th><th>ID</th><th>Name</th><th>Class</th><th>Dept</th><th>Action</th></tr></thead>
+      <thead><tr><th>#</th><th>Photo</th><th>ID</th><th>Name</th><th>Class</th><th>Dept</th><th>Action</th></tr></thead>
       <tbody id="students-tbody"></tbody>
     </table></div>
+    <input type="file" id="stu-photo-input" accept="image/*" style="display:none" onchange="handlePhotoFileChosen(event)"/>
   </div>
 </div>
 
@@ -679,9 +721,18 @@ setTimeout(()=>{
 // ════════════════════════════════════════════
 //  STATIC DATA
 // ════════════════════════════════════════════
-const CLASSES=["Nursery 1","Nursery 2","Primary 1","Primary 2","Primary 3","Primary 4","Primary 5","Primary 6",
+const CLASSES=["Busy Bee",
+  "Pre Nursery Gold","Pre Nursery Diamond",
+  "Nursery 1 Gold","Nursery 1 Diamond","Nursery 1 Pearl",
+  "Nursery 2 Gold","Nursery 2 Diamond","Nursery 2 Pearl",
+  "Basic 1 Gold","Basic 1 Diamond","Basic 1 Pearl",
+  "Basic 2 Gold","Basic 2 Diamond","Basic 2 Pearl",
+  "Basic 3 Gold","Basic 3 Diamond","Basic 3 Pearl",
+  "Basic 4 Gold","Basic 4 Diamond","Basic 4 Pearl",
+  "Basic 5 Gold","Basic 5 Diamond","Basic 5 Pearl",
+  "Basic 6 Gold","Basic 6 Diamond","Basic 6 Pearl",
   "Basic 7A","Basic 7B","Basic 8A","Basic 8B","Basic 9A","Basic 9B",
-  "SSS 1A","SSS 1B","SSS 2A","SSS 2B","SSS 3A","SSS 3B"];
+  "SSS 1","SSS 1A","SSS 1B","SSS 2","SSS 2A","SSS 2B","SSS 3","SSS 3A","SSS 3B"];
 const SUBJECTS={
   nursery:["Number Work","Letter Work","Verbal Reasoning","Basic Science","Social Habits","Arts & Craft","Physical Education"],
   primary:["Mathematics","English Language","Basic Science","Social Studies","Civic Education","CRS/IRS","Fine Arts","PHE","Verbal Aptitude","Quantitative Reasoning"],
@@ -696,9 +747,13 @@ const SSS_DEPARTMENTS=["Sciences","Humanities","Business"];
 function getSubs(cls, dept){
   if(!cls) return [];
   const c=cls.toLowerCase();
-  if(c.includes("nursery")) return SUBJECTS.nursery;
-  if(c.includes("primary")) return SUBJECTS.primary;
-  if(c.includes("basic 7")||c.includes("basic 8")||c.includes("basic 9")) return SUBJECTS.basic;
+  if(c.includes("busy bee")||c.includes("pre nursery")||c.includes("nursery")) return SUBJECTS.nursery;
+  const basicNum=c.match(/basic\s*(\d+)/);
+  if(basicNum){
+    const n=parseInt(basicNum[1],10);
+    if(n>=1&&n<=6) return SUBJECTS.primary;
+    if(n>=7&&n<=9) return SUBJECTS.basic;
+  }
   // SSS — use department
   if(dept==="Sciences") return SUBJECTS.sciences;
   if(dept==="Humanities") return SUBJECTS.humanities;
@@ -998,7 +1053,11 @@ function renderStudents(){
   list.forEach((s,i)=>{
     const tr=document.createElement("tr");
     const deptBadge=s.department?`<span class="badge" style="background:#F0FDF4;color:#16A34A;font-size:11px">${s.department}</span>`:"—";
+    const photoCell=s.photo
+      ?`<img src="${s.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;cursor:pointer;border:2px solid var(--border)" onclick="triggerPhotoUpload('${s.id}')" title="Tap to change photo"/>`
+      :`<div style="width:36px;height:36px;border-radius:50%;background:var(--light);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--slate);font-size:15px;border:2px dashed var(--border)" onclick="triggerPhotoUpload('${s.id}')" title="Tap to add photo">📷</div>`;
     tr.innerHTML=`<td style="color:var(--slate)">${i+1}</td>
+      <td>${photoCell}</td>
       <td style="font-family:monospace;color:var(--royal);font-weight:600;font-size:11px">${s.id.slice(0,8)}</td>
       <td style="font-weight:600">${s.lastName} ${s.firstName}</td>
       <td><span class="badge" style="background:var(--light);color:var(--royal)">${s.class}</span></td>
@@ -1006,8 +1065,203 @@ function renderStudents(){
       <td><button class="btn btn-ghost btn-sm" onclick="viewReport('${s.id}')">📋 Report</button></td>`;
     tbody.appendChild(tr);
   });
-  if(!list.length) tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--slate)">No students found.</td></tr>`;
+  if(!list.length) tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--slate)">No students found.</td></tr>`;
 }
+let photoUploadTargetId=null;
+function triggerPhotoUpload(stuId){
+  photoUploadTargetId=stuId;
+  document.getElementById("stu-photo-input").value="";
+  document.getElementById("stu-photo-input").click();
+}
+function handlePhotoFileChosen(evt){
+  const file=evt.target.files[0];
+  if(!file||!photoUploadTargetId) return;
+  resizeImageFile(file,dataUrl=>savePhotoToStudent(photoUploadTargetId,dataUrl));
+}
+function resizeImageFile(file,callback){
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const maxW=200,maxH=250;
+      let w=img.width,h=img.height;
+      const ratio=Math.min(maxW/w,maxH/h,1);
+      w=Math.round(w*ratio);h=Math.round(h*ratio);
+      const canvas=document.createElement("canvas");
+      canvas.width=w;canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      callback(canvas.toDataURL("image/jpeg",0.7));
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+async function savePhotoToStudent(stuId,dataUrl){
+  try{
+    showToast("Uploading photo…");
+    await db.collection("students").doc(stuId).update({photo:dataUrl});
+    await loadStudents();renderStudents();
+    showToast("✓ Photo saved!");
+  }catch(e){showToast("Error saving photo","err");console.error(e);}
+}
+
+// ── BULK PHOTO UPLOAD ───────────────────────────────────────────────────────
+// ── PROMOTE STUDENTS ────────────────────────────────────────────────────────
+let promoteRows=[]; // {id,label,deptOverride}
+function togglePromoteForm(){
+  const f=document.getElementById("promote-form");
+  f.style.display=f.style.display==="none"?"block":"none";
+  if(f.style.display==="block"){
+    const sel=document.getElementById("promote-from-class");
+    const distinctClasses=[...new Set(students.map(s=>s.class))].sort();
+    sel.innerHTML=`<option value="">— Select Class —</option>`+distinctClasses.map(c=>`<option value="${c}">${c} (${students.filter(s=>s.class===c).length} students)</option>`).join("");
+    document.getElementById("promote-to-class").value="";
+    document.getElementById("promote-list").innerHTML="";
+    document.getElementById("promote-apply-btn").style.display="none";
+  }
+}
+function renderPromoteList(){
+  const fromClass=document.getElementById("promote-from-class").value;
+  const listDiv=document.getElementById("promote-list");
+  if(!fromClass){listDiv.innerHTML="";document.getElementById("promote-apply-btn").style.display="none";return;}
+  const matching=students.filter(s=>s.class===fromClass).sort((a,b)=>(a.lastName+a.firstName).localeCompare(b.lastName+b.firstName));
+  promoteRows=matching.map(s=>({id:s.id,label:`${s.lastName} ${s.firstName}`,checked:true,deptOverride:""}));
+  renderPromoteRowsUI();
+  document.getElementById("promote-apply-btn").style.display=matching.length?"block":"none";
+}
+function renderPromoteRowsUI(){
+  const listDiv=document.getElementById("promote-list");
+  const deptOpts=["","Sciences","Humanities","Business"];
+  listDiv.innerHTML=`<div style="font-size:12px;color:var(--slate);margin-bottom:4px">${promoteRows.length} student(s) — uncheck any to exclude, or set an individual department override</div>`
+    +promoteRows.map((r,i)=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--light);border-radius:7px;font-size:13px">
+        <input type="checkbox" ${r.checked?"checked":""} onchange="promoteRows[${i}].checked=this.checked"/>
+        <div style="flex:1">${r.label}</div>
+        <select onchange="promoteRows[${i}].deptOverride=this.value" style="width:auto;padding:4px 6px;font-size:12px">
+          <option value="" ${r.deptOverride===""?"selected":""}>Use default above</option>
+          <option value="Sciences" ${r.deptOverride==="Sciences"?"selected":""}>Sciences</option>
+          <option value="Humanities" ${r.deptOverride==="Humanities"?"selected":""}>Humanities</option>
+          <option value="Business" ${r.deptOverride==="Business"?"selected":""}>Business</option>
+        </select>
+      </div>`).join("");
+}
+async function applyPromotion(){
+  const newClass=document.getElementById("promote-to-class").value.trim();
+  const defaultDept=document.getElementById("promote-default-dept").value;
+  if(!newClass){showToast("Enter the new class name first","err");return;}
+  const selected=promoteRows.filter(r=>r.checked);
+  if(!selected.length){showToast("No students selected","err");return;}
+  if(!confirm(`Promote ${selected.length} student(s) to "${newClass}"? This cannot be easily undone.`)) return;
+  const btn=document.getElementById("promote-apply-btn");
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Promoting…';
+  try{
+    for(const r of selected){
+      const update={class:newClass};
+      if(r.deptOverride) update.department=r.deptOverride;
+      else if(defaultDept==="") update.department=firebase.firestore.FieldValue.delete();
+      else if(defaultDept!=="__keep__") update.department=defaultDept;
+      await db.collection("students").doc(r.id).update(update);
+    }
+    await loadStudents();renderStudents();
+    showToast(`✓ ${selected.length} student(s) promoted to ${newClass}!`);
+    togglePromoteForm();
+  }catch(e){showToast("Error during promotion","err");console.error(e);}
+  btn.disabled=false;btn.innerHTML="✅ Apply Promotion to Selected Students";
+}
+
+let bulkPhotoRows=[]; // {file, filename, dataUrl, matchedId, matchedLabel}
+function toggleBulkPhotoForm(){
+  const f=document.getElementById("bulk-photo-form");
+  f.style.display=f.style.display==="none"?"block":"none";
+  if(f.style.display==="none"){
+    bulkPhotoRows=[];
+    document.getElementById("bulk-photo-preview").innerHTML="";
+    document.getElementById("bulk-photo-save-btn").style.display="none";
+    document.getElementById("bulk-photo-input").value="";
+  }
+}
+function normalizeName(str){
+  return (str||"").toUpperCase().replace(/\.[a-z0-9]+$/i,"").replace(/[^A-Z0-9]+/g," ").trim().replace(/\s+/g," ");
+}
+function findBestStudentMatch(filename){
+  const target=normalizeName(filename);
+  if(!target) return null;
+  // exact match against "LAST FIRST" or "FIRST LAST"
+  for(const s of students){
+    const a=normalizeName(`${s.lastName} ${s.firstName}`);
+    const b=normalizeName(`${s.firstName} ${s.lastName}`);
+    if(target===a||target===b) return s;
+  }
+  // fallback: partial match (filename contains both name parts)
+  for(const s of students){
+    const ln=normalizeName(s.lastName),fn=normalizeName(s.firstName);
+    if(ln&&fn&&target.includes(ln)&&target.includes(fn)) return s;
+  }
+  return null;
+}
+function handleBulkPhotoFiles(evt){
+  const files=[...evt.target.files];
+  if(!files.length) return;
+  bulkPhotoRows=[];
+  const preview=document.getElementById("bulk-photo-preview");
+  preview.innerHTML=`<div style="color:var(--slate);font-size:13px">Processing ${files.length} photo(s)…</div>`;
+  let processed=0;
+  files.forEach((file,idx)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const match=findBestStudentMatch(file.name);
+      bulkPhotoRows.push({
+        idx,file,filename:file.name,thumbDataUrl:e.target.result,
+        matchedId:match?match.id:"",
+        matchedLabel:match?`${match.lastName} ${match.firstName} (${match.class})`:""
+      });
+      processed++;
+      if(processed===files.length) renderBulkPhotoPreview();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function renderBulkPhotoPreview(){
+  bulkPhotoRows.sort((a,b)=>a.idx-b.idx);
+  const preview=document.getElementById("bulk-photo-preview");
+  const matchedCount=bulkPhotoRows.filter(r=>r.matchedId).length;
+  const studentOptions=students.map(s=>`<option value="${s.id}">${s.lastName} ${s.firstName} (${s.class})</option>`).join("");
+  preview.innerHTML=`<div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:6px">${matchedCount} of ${bulkPhotoRows.length} matched automatically. Fix any below, then save.</div>`
+    +bulkPhotoRows.map((r,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--light);border-radius:8px">
+        <img src="${r.thumbDataUrl}" style="width:40px;height:50px;object-fit:cover;border-radius:5px;flex-shrink:0"/>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.filename}</div>
+          <select onchange="bulkPhotoRows[${i}].matchedId=this.value" style="margin-top:4px;font-size:13px;padding:6px 8px">
+            <option value="">— No match, select student —</option>
+            ${students.map(s=>`<option value="${s.id}" ${r.matchedId===s.id?"selected":""}>${s.lastName} ${s.firstName} (${s.class})</option>`).join("")}
+          </select>
+        </div>
+      </div>`).join("");
+  document.getElementById("bulk-photo-save-btn").style.display=bulkPhotoRows.length?"block":"none";
+}
+async function saveBulkPhotos(){
+  const toSave=bulkPhotoRows.filter(r=>r.matchedId);
+  if(!toSave.length){showToast("No photos matched to students yet","err");return;}
+  const btn=document.getElementById("bulk-photo-save-btn");
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving…';
+  try{
+    let done=0;
+    for(const r of toSave){
+      await new Promise(resolve=>{
+        resizeImageFile(r.file,async dataUrl=>{
+          await db.collection("students").doc(r.matchedId).update({photo:dataUrl});
+          done++;resolve();
+        });
+      });
+    }
+    await loadStudents();renderStudents();
+    showToast(`✓ ${done} photo(s) saved!`);
+    toggleBulkPhotoForm();
+  }catch(e){showToast("Error saving some photos","err");console.error(e);}
+  btn.disabled=false;btn.innerHTML="💾 Save All Matched Photos";
+}
+
 function toggleAddForm(){
   const f=document.getElementById("add-form");
   f.style.display=f.style.display==="none"?"block":"none";
@@ -1365,7 +1619,12 @@ async function viewReport(stuId){
       </div>
     </div>
     <div class="rc-info-bar">
-      <div class="ri-item"><div class="ri-l">Student Name</div><div class="ri-v">${stu.lastName} ${stu.firstName}</div></div>
+      <div class="ri-item" style="display:flex;align-items:center;gap:10px">
+        ${stu.photo
+          ?`<img src="${stu.photo}" style="width:52px;height:65px;object-fit:cover;border-radius:5px;border:2px solid var(--gold);flex-shrink:0"/>`
+          :`<div style="width:52px;height:65px;border-radius:5px;border:2px dashed var(--border);background:var(--light);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--slate)">📷</div>`}
+        <div><div class="ri-l">Student Name</div><div class="ri-v">${stu.lastName} ${stu.firstName}</div></div>
+      </div>
       <div class="ri-item"><div class="ri-l">Class</div><div class="ri-v">${stu.class}</div></div>
       <div class="ri-item"><div class="ri-l">Subjects</div><div class="ri-v">${rows.length}</div></div>
       ${stu.department?`<div class="ri-item"><div class="ri-l">Department</div><div class="ri-v">${stu.department}</div></div>`:""}
@@ -1468,6 +1727,8 @@ async function loadTeachers(){
             ${d.status!=="approved"&&d.role!=="admin"?`<button class="btn btn-green btn-sm" onclick="setTeacherStatus('${doc.id}','approved')">✓ Approve</button>`:""}
             ${d.status!=="rejected"&&d.role!=="admin"?`<button class="btn btn-red btn-sm" onclick="setTeacherStatus('${doc.id}','rejected')">✕ Reject</button>`:""}
             ${d.status==="approved"&&d.role!=="admin"?`<button class="btn btn-ghost btn-sm" onclick="setTeacherStatus('${doc.id}','pending')">↺ Revoke</button>`:""}
+            ${d.status==="approved"&&d.role!=="admin"?`<button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}')">⭐ Make Admin</button>`:""}
+            ${d.role==="admin"&&doc.id!==currentUserProfile?.uid?`<button class="btn btn-ghost btn-sm" onclick="setTeacherAdmin('${doc.id}',false,'${(d.name||d.email||"").replace(/'/g,"\\'")}')">Remove Admin</button>`:""}
           </div>
         </div>`;
       wrap.appendChild(card);
@@ -1575,6 +1836,17 @@ async function getAssignedSubjects(cls){
 async function setTeacherStatus(uid,status){
   try{ await db.collection("users").doc(uid).update({status}); showToast("✓ Updated!"); loadTeachers(); }
   catch(e){ showToast("Error updating account","err"); }
+}
+async function setTeacherAdmin(uid,makeAdmin,name){
+  const msg=makeAdmin
+    ? `Make ${name} an ADMIN? They will be able to approve teachers, manage all students, and edit results for every class.`
+    : `Remove admin access from ${name}? They will become a regular teacher again.`;
+  if(!confirm(msg)) return;
+  try{
+    await db.collection("users").doc(uid).update({role:makeAdmin?"admin":"teacher"});
+    showToast(makeAdmin?"✓ Now an admin!":"✓ Admin access removed");
+    loadTeachers();
+  }catch(e){ showToast("Error updating role","err"); console.error(e); }
 }
 
 // ════════════════════════════════════════════
