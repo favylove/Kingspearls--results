@@ -255,7 +255,7 @@ tr:nth-child(even) td{background:#F8FAFF;}
     <div class="g2">
       <div class="fg"><label class="lbl">Session</label>
         <select id="d-session" onchange="setSession(this.value)">
-          <option>2023/2024</option><option>2024/2025</option><option selected>2025/2026</option>
+          <option>2023/2024</option><option>2024/2025</option><option>2025/2026</option><option selected>2026/2027</option><option>2027/2028</option><option>2028/2029</option>
         </select></div>
       <div class="fg"><label class="lbl">Term</label>
         <select id="d-term" onchange="setTerm(this.value)">
@@ -284,8 +284,8 @@ tr:nth-child(even) td{background:#F8FAFF;}
         <select id="reg-session">
           <option>2023/2024</option>
           <option>2024/2025</option>
-          <option selected>2025/2026</option>
-          <option>2026/2027</option>
+          <option>2025/2026</option>
+          <option selected>2026/2027</option>
           <option>2027/2028</option>
         </select>
       </div>
@@ -385,12 +385,12 @@ tr:nth-child(even) td{background:#F8FAFF;}
         </div>
       </div>
       <div style="background:var(--light);border-radius:9px;padding:9px 14px;font-size:12px;color:var(--slate);margin-bottom:10px">
-        CA = max 40 marks &nbsp;|&nbsp; Exam = max 60 marks &nbsp;|&nbsp; Total = 100
+        CA1 = max 20 &nbsp;|&nbsp; CA2 = max 20 &nbsp;|&nbsp; Exam = max 60 marks &nbsp;|&nbsp; Total = 100
       </div>
       <div class="card" style="padding:0">
         <div class="tbl-wrap">
           <table id="scores-table">
-            <thead><tr><th>#</th><th>ID</th><th>Student Name</th><th>CA(/40)</th><th>Exam(/60)</th><th>Total</th><th>Grade</th><th>Comment</th></tr></thead>
+            <thead><tr><th>#</th><th>ID</th><th>Student Name</th><th>CA1(/20)</th><th>CA2(/20)</th><th>Exam(/60)</th><th>Total</th><th>Grade</th><th>Comment</th></tr></thead>
             <tbody id="scores-tbody"></tbody>
           </table>
         </div>
@@ -445,6 +445,30 @@ tr:nth-child(even) td{background:#F8FAFF;}
       <button class="btn btn-ghost btn-sm" onclick="togglePromoteForm()">🎓 Promote Students</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleBulkPhotoForm()">📸 Bulk Upload Photos</button>
       <button class="btn btn-gold btn-sm" onclick="toggleAddForm()">+ Add Student</button>
+    </div>
+  </div>
+  <div id="edit-student-form" class="card" style="display:none;border:2px solid var(--gold);margin-bottom:14px">
+    <div class="card-title">✏️ Edit Student</div>
+    <div class="g2">
+      <div class="fg"><label class="lbl">First Name</label><input type="text" id="edit-stu-fn"/></div>
+      <div class="fg"><label class="lbl">Last Name</label><input type="text" id="edit-stu-ln"/></div>
+    </div>
+    <div class="g2">
+      <div class="fg"><label class="lbl">Class</label>
+        <select id="edit-stu-class"></select>
+      </div>
+      <div class="fg"><label class="lbl">Department</label>
+        <select id="edit-stu-dept">
+          <option value="">— No department —</option>
+          <option value="Sciences">Sciences</option>
+          <option value="Humanities">Humanities</option>
+          <option value="Business">Business</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="saveEditStudent()">💾 Save Changes</button>
+      <button class="btn btn-ghost" onclick="closeEditStudent()">Cancel</button>
     </div>
   </div>
   <div id="promote-form" class="card" style="display:none;border:2px solid var(--purple);margin-bottom:14px">
@@ -576,7 +600,7 @@ tr:nth-child(even) td{background:#F8FAFF;}
       <div class="fg"><label class="lbl">Academic Session</label>
         <select id="cum-session">
           <option>2023/2024</option><option>2024/2025</option>
-          <option selected>2025/2026</option><option>2026/2027</option>
+          <option>2025/2026</option><option selected>2026/2027</option>
         </select>
       </div>
       <div class="fg"><label class="lbl">Class</label>
@@ -771,8 +795,16 @@ function isSSSClass(cls){
   const c=cls.toLowerCase();
   return c.includes("sss");
 }
-const PSYCHOMOTOR_TRAITS=["Handwriting","Drawing & Painting","Sports & Games","Handling of Tools","Musical Ability","Speech Fluency","Practical Skills","Neatness"];
-const AFFECTIVE_TRAITS=["Punctuality","Attendance","Attentiveness","Neatness & Appearance","Politeness","Honesty","Cooperation","Perseverance","Leadership","Relationship with Others"];
+const JUNIOR_PSYCHOMOTOR_TRAITS=["Handwriting","Drawing & Painting","Sports & Games","Handling of Tools","Musical Ability","Speech Fluency","Practical Skills","Neatness"];
+const SECONDARY_PSYCHOMOTOR_TRAITS=["Handwriting","Verbal Fluency","Sports & Games","Handling of Tools/Equipment","Practical Skills"];
+const AFFECTIVE_TRAITS=["Punctuality","Attentiveness","Neatness & Appearance","Politeness","Honesty","Cooperation","Perseverance","Leadership","Relationship with Others"];
+function getPsychoTraits(cls){
+  if(!cls) return JUNIOR_PSYCHOMOTOR_TRAITS;
+  const c=cls.toLowerCase();
+  const basicNum=c.match(/basic\s*(\d+)/);
+  const isSecondary=c.includes("sss")||(basicNum&&parseInt(basicNum[1],10)>=7);
+  return isSecondary?SECONDARY_PSYCHOMOTOR_TRAITS:JUNIOR_PSYCHOMOTOR_TRAITS;
+}
 function gradeInfo(s){
   if(s>=75) return{grade:"A1",remark:"Excellent",color:"#16A34A"};
   if(s>=70) return{grade:"B2",remark:"Very Good",color:"#16A34A"};
@@ -791,7 +823,7 @@ function ordSuffix(n){const s=["th","st","nd","rd"];const v=n%100;return s[(v-20
 //  STATE
 // ════════════════════════════════════════════
 let students=[];           // [{id,firstName,lastName,class}]
-let currentSession="2025/2026", currentTerm="First Term";
+let currentSession="2026/2027", currentTerm="First Term";
 let resultsCache={};       // docId -> {studentId,class,term,session,subjects,psycho,affective,attendance,ctComment,pcComment}
 
 function termKey(){ return currentTerm.replace(/\s+/g,"")+"_"+currentSession.replace("/","-"); }
@@ -1068,7 +1100,7 @@ function renderStudents(){
       <td style="font-weight:600">${s.lastName} ${s.firstName}</td>
       <td><span class="badge" style="background:var(--light);color:var(--royal)">${s.class}</span></td>
       <td>${deptBadge}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="viewReport('${s.id}')">📋 Report</button></td>`;
+      <td><button class="btn btn-ghost btn-sm" onclick="openEditStudent('${s.id}')">✏️ Edit</button> <button class="btn btn-ghost btn-sm" onclick="viewReport('${s.id}')">📋 Report</button></td>`;
     tbody.appendChild(tr);
   });
   if(!list.length) tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--slate)">No students found.</td></tr>`;
@@ -1112,6 +1144,41 @@ async function savePhotoToStudent(stuId,dataUrl){
 }
 
 // ── BULK PHOTO UPLOAD ───────────────────────────────────────────────────────
+// ── EDIT STUDENT ─────────────────────────────────────────────────────────
+let editStudentId=null;
+function openEditStudent(stuId){
+  const s=students.find(x=>x.id===stuId); if(!s) return;
+  editStudentId=stuId;
+  document.getElementById("edit-stu-fn").value=s.firstName||"";
+  document.getElementById("edit-stu-ln").value=s.lastName||"";
+  const clsSel=document.getElementById("edit-stu-class");
+  clsSel.innerHTML=CLASSES.map(c=>`<option value="${c}" ${c===s.class?"selected":""}>${c}</option>`).join("");
+  document.getElementById("edit-stu-dept").value=s.department||"";
+  document.getElementById("edit-student-form").style.display="block";
+  document.getElementById("edit-student-form").scrollIntoView({behavior:"smooth",block:"center"});
+}
+function closeEditStudent(){
+  editStudentId=null;
+  document.getElementById("edit-student-form").style.display="none";
+}
+async function saveEditStudent(){
+  if(!editStudentId) return;
+  const fn=document.getElementById("edit-stu-fn").value.trim();
+  const ln=document.getElementById("edit-stu-ln").value.trim();
+  const cls=document.getElementById("edit-stu-class").value;
+  const dept=document.getElementById("edit-stu-dept").value;
+  if(!fn||!ln||!cls){showToast("Please fill in name and class","err");return;}
+  try{
+    const update={firstName:fn,lastName:ln,class:cls};
+    if(dept) update.department=dept;
+    else update.department=firebase.firestore.FieldValue.delete();
+    await db.collection("students").doc(editStudentId).update(update);
+    showToast("✓ Student updated!");
+    closeEditStudent();
+    await loadStudents();renderStudents();
+  }catch(e){showToast("Error saving changes","err");console.error(e);}
+}
+
 // ── PROMOTE STUDENTS ────────────────────────────────────────────────────────
 let promoteRows=[]; // {id,label,deptOverride}
 function togglePromoteForm(){
@@ -1378,14 +1445,15 @@ async function onSubjectChange(){
   const tbody=document.getElementById("scores-tbody"); tbody.innerHTML="";
   list.forEach((s,i)=>{
     const data=resultsCache[resultDocId(s.id)];
-    const sc=data.subjects[sub]||{ca:"",exam:"",comment:""};
-    const ca=Number(sc.ca||0),exam=Number(sc.exam||0),tot=ca+exam;
+    const sc=data.subjects[sub]||{ca1:"",ca2:"",exam:"",comment:""};
+    const ca1=Number(sc.ca1||0),ca2=Number(sc.ca2||0),exam=Number(sc.exam||0),tot=ca1+ca2+exam;
     const gi=tot>0?gradeInfo(tot):null;
     const tr=document.createElement("tr");
     tr.innerHTML=`<td style="color:var(--slate)">${i+1}</td>
       <td style="font-family:monospace;color:var(--royal);font-weight:600;font-size:11px">${s.id.slice(0,8)}</td>
       <td style="font-weight:600">${s.lastName} ${s.firstName}</td>
-      <td><input class="score-inp" type="number" min="0" max="40" value="${sc.ca||""}" placeholder="0" data-id="${s.id}" data-t="ca" oninput="liveRow(this)"/></td>
+      <td><input class="score-inp" type="number" min="0" max="20" value="${sc.ca1||""}" placeholder="0" data-id="${s.id}" data-t="ca1" oninput="liveRow(this)"/></td>
+      <td><input class="score-inp" type="number" min="0" max="20" value="${sc.ca2||""}" placeholder="0" data-id="${s.id}" data-t="ca2" oninput="liveRow(this)"/></td>
       <td><input class="score-inp" type="number" min="0" max="60" value="${sc.exam||""}" placeholder="0" data-id="${s.id}" data-t="exam" oninput="liveRow(this)"/></td>
       <td id="tot-${s.id}" style="font-weight:700;color:${gi?gi.color:"var(--slate)"}">${tot>0?tot:"–"}</td>
       <td id="grd-${s.id}">${gi?`<span class="badge" style="background:${gi.color}18;color:${gi.color}">${gi.grade}</span>`:""}</td>
@@ -1395,13 +1463,16 @@ async function onSubjectChange(){
 }
 function liveRow(inp){
   const id=inp.dataset.id,type=inp.dataset.t;
-  const val=Math.min(Number(inp.value)||0,type==="ca"?40:60);
+  const maxVal=type==="exam"?60:20;
+  const val=Math.min(Number(inp.value)||0,maxVal);
   if(inp.value) inp.value=val;
-  let ca=0,exam=0;
+  let ca1=0,ca2=0,exam=0;
   document.querySelectorAll(`[data-id="${id}"]`).forEach(i=>{
-    if(i.dataset.t==="ca") ca=Number(i.value)||0; else if(i.dataset.t==="exam") exam=Number(i.value)||0;
+    if(i.dataset.t==="ca1") ca1=Number(i.value)||0;
+    else if(i.dataset.t==="ca2") ca2=Number(i.value)||0;
+    else if(i.dataset.t==="exam") exam=Number(i.value)||0;
   });
-  const tot=ca+exam,gi=tot>0?gradeInfo(tot):null;
+  const tot=ca1+ca2+exam,gi=tot>0?gradeInfo(tot):null;
   document.getElementById(`tot-${id}`).textContent=tot>0?tot:"–";
   document.getElementById(`tot-${id}`).style.color=gi?gi.color:"var(--slate)";
   document.getElementById(`grd-${id}`).innerHTML=gi?`<span class="badge" style="background:${gi.color}18;color:${gi.color}">${gi.grade}</span>`:"";
@@ -1417,13 +1488,14 @@ async function saveScores(){
   ids.forEach(id=>{
     const data=resultsCache[resultDocId(id)];
     if(!data) return;
-    let ca=0,exam=0,comment="";
+    let ca1=0,ca2=0,exam=0,comment="";
     document.querySelectorAll(`[data-id="${id}"]`).forEach(i=>{
-      if(i.dataset.t==="ca") ca=Number(i.value)||0;
+      if(i.dataset.t==="ca1") ca1=Number(i.value)||0;
+      else if(i.dataset.t==="ca2") ca2=Number(i.value)||0;
       else if(i.dataset.t==="exam") exam=Number(i.value)||0;
       else if(i.dataset.t==="comment") comment=i.value;
     });
-    data.subjects[sub]={ca,exam,comment};
+    data.subjects[sub]={ca1,ca2,ca:ca1+ca2,exam,comment};
     data.class=cls; data.term=currentTerm; data.session=currentSession; data.studentId=id;
   });
   try{
@@ -1452,7 +1524,7 @@ async function renderPsychoTable(){
     div.className="card"; div.style.marginBottom="12px";
     div.innerHTML=`<div style="font-weight:700;color:var(--navy);margin-bottom:12px">${stu.lastName} ${stu.firstName}</div>
       <div class="sec-hd" style="margin-top:0">Psychomotor Skills</div>
-      ${PSYCHOMOTOR_TRAITS.map(t=>`<div class="domain-row"><div class="domain-label">${t}</div>
+      ${getPsychoTraits(stu.class).map(t=>`<div class="domain-row"><div class="domain-label">${t}</div>
         <div class="rating-btns">${[5,4,3,2,1].map(n=>`<div class="rbn${(data.psycho[t]||0)===n?" sel-"+n:""}" onclick="setRating('${stu.id}','psycho','${t}',${n},this)">${n}</div>`).join("")}</div></div>`).join("")}
       <div class="sec-hd">Affective Domain</div>
       ${AFFECTIVE_TRAITS.map(t=>`<div class="domain-row"><div class="domain-label">${t}</div>
@@ -1653,7 +1725,7 @@ async function viewReport(stuId){
     <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border);margin-top:14px">
       <div style="border-right:1px solid var(--border)">
         <div style="font-size:11px;font-weight:700;color:var(--royal);text-transform:uppercase;letter-spacing:1px;padding:10px 16px 6px">Psychomotor Skills</div>
-        ${domainRows(PSYCHOMOTOR_TRAITS,"psycho")}
+        ${domainRows(getPsychoTraits(stu.class),"psycho")}
       </div>
       <div>
         <div style="font-size:11px;font-weight:700;color:var(--royal);text-transform:uppercase;letter-spacing:1px;padding:10px 16px 6px">Affective Domain</div>
