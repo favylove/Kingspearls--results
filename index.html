@@ -357,6 +357,12 @@ tr:nth-child(even) td{background:#F8FAFF;}
       <div class="g2">
         <div class="fg"><label class="lbl">Class</label>
           <select id="r-class" onchange="onClassChange()"><option value="">— Select Class —</option></select></div>
+        <div class="fg" id="r-dept-row" style="display:none"><label class="lbl">Department (SSS only)</label>
+          <select id="r-dept" onchange="onClassChange()">
+            <option value="Sciences">Sciences</option>
+            <option value="Humanities">Humanities</option>
+            <option value="Business">Business</option>
+          </select></div>
         <div class="fg"><label class="lbl">Subject</label>
           <select id="r-subject" onchange="onSubjectChange()"><option value="">— Select Subject —</option></select></div>
         <!-- teacher-only filter notice -->
