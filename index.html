@@ -1644,12 +1644,15 @@ async function viewReport(stuId){
   const att=data.attendance||{days:0,present:0};
   const attPct=att.days>0?Math.round(att.present/att.days*100):0;
 
+  const rowPalette=["#F0FDF4","#EFF6FF","#FEF3C7","#F5F3FF","#FCE7F3","#ECFEFF","#FFF7ED","#F0FDFA","#FDF2F8"];
   function domainRows(){
-    return DOMAIN_TRAITS.map(t=>{
+    return DOMAIN_TRAITS.map((t,i)=>{
       const n=data.psycho[t]||0;
-      const color=["","#DC2626","#D97706","#7C3AED","#2563EB","#16A34A"][n]||"var(--slate)";
-      return`<div class="domain-row" style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed var(--border)"><div class="domain-label" style="font-size:11px;color:var(--navy);font-weight:600">${t}</div>
-        <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:20px;border-radius:4px;background:${n?"var(--gold)":"#E2E8F0"};color:${n?"var(--navy)":"var(--slate)"};font-size:12px;font-weight:800">${n||"–"}</span></div>`;
+      return`<tr style="background:${rowPalette[i%rowPalette.length]}">
+        <td style="padding:5px 10px;font-size:11px;color:var(--navy);font-weight:600">${t}</td>
+        <td style="padding:5px 10px;text-align:center">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:20px;border-radius:4px;background:${n?"var(--gold)":"#E2E8F0"};color:${n?"var(--navy)":"var(--slate)"};font-size:12px;font-weight:800">${n||"–"}</span>
+        </td></tr>`;
     }).join("");
   }
 
@@ -1657,7 +1660,7 @@ async function viewReport(stuId){
     ?`<tr><td colspan="7" style="text-align:center;padding:36px;color:var(--slate)">No results recorded for ${currentTerm}.</td></tr>`
     :rows.map((r,i)=>{
       const gi=gradeInfo(r.tot);
-      return`<tr style="background:${i%2===0?"#fff":"#F0FDF4"}">
+      return`<tr style="background:${rowPalette[i%rowPalette.length]}">
         <td style="padding:9px 14px;font-weight:600">${r.subject}</td>
         <td style="padding:9px 14px;color:var(--slate);text-align:center">${r.ca||"–"}</td>
         <td style="padding:9px 14px;color:var(--slate);text-align:center">${r.exam||"–"}</td>
@@ -1698,7 +1701,21 @@ async function viewReport(stuId){
       <div class="ri-item"><div class="ri-l">Subjects</div><div class="ri-v">${rows.length}</div></div>
       ${stu.department?`<div class="ri-item"><div class="ri-l">Department</div><div class="ri-v">${stu.department}</div></div>`:""}
       <div class="ri-item"><div class="ri-l">Position</div><div class="ri-v">${pos?pos+ordSuffix(pos)+" / "+classStu.length:"—"}</div></div>
-      <div class="ri-item"><div class="ri-l">School Opened / Present / Absent</div><div class="ri-v" style="color:${attPct>=75?"var(--green)":"var(--red)"}">${att.days} / ${att.present} / ${Math.max(0,att.days-att.present)} (${attPct}%)</div></div>
+      <div class="ri-item">
+        <div class="ri-l">No. of Times</div>
+        <table style="border-collapse:collapse;margin-top:2px">
+          <tr>
+            <td style="padding:2px 8px;font-size:9px;color:var(--slate);text-align:center;border:1px solid var(--border)">School Opened</td>
+            <td style="padding:2px 8px;font-size:9px;color:var(--slate);text-align:center;border:1px solid var(--border)">Present</td>
+            <td style="padding:2px 8px;font-size:9px;color:var(--slate);text-align:center;border:1px solid var(--border)">Absent</td>
+          </tr>
+          <tr>
+            <td style="padding:3px 8px;font-size:12px;font-weight:700;color:var(--navy);text-align:center;border:1px solid var(--border)">${att.days}</td>
+            <td style="padding:3px 8px;font-size:12px;font-weight:700;text-align:center;border:1px solid var(--border);color:${attPct>=75?"var(--green)":"var(--red)"}">${att.present}</td>
+            <td style="padding:3px 8px;font-size:12px;font-weight:700;color:var(--red);text-align:center;border:1px solid var(--border)">${Math.max(0,att.days-att.present)}</td>
+          </tr>
+        </table>
+      </div>
     </div>
     <div style="padding:16px 0 0">
       <div style="font-size:11px;font-weight:700;color:var(--royal);text-transform:uppercase;letter-spacing:1px;padding:0 16px 8px">Academic Performance</div>
@@ -1715,7 +1732,7 @@ async function viewReport(stuId){
     </div>
     <div style="border-top:1px solid var(--border);margin-top:10px;padding:8px 16px 6px">
       <div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Domains</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">${domainRows()}</div>
+      <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><tbody>${domainRows()}</tbody></table></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border)">
       <div style="padding:14px 16px;border-right:1px solid var(--border)">
