@@ -160,6 +160,28 @@ tr:nth-child(even) td{background:#F8FAFF;}
   #page-report .domain-row{padding:2px 0!important;font-size:10.5px!important;}
   #page-report .card,#page-report table,#page-report tr,#page-report .domain-row,
   #page-report .rc-info-bar,#page-report thead{page-break-inside:avoid;}
+
+  /* ── report-card compaction for one-page print ── */
+  #rc-inner{max-width:100%!important;border:none!important;box-shadow:none!important;border-radius:0!important;}
+  #page-report .rc-header{padding:8px 12px!important;gap:10px!important;}
+  #page-report .rc-header img{width:36px!important;height:36px!important;}
+  #page-report .rc-header div[style*="font-size:19px"]{font-size:14px!important;line-height:1.1!important;}
+  #page-report .rc-header div[style*="font-size:28px"]{font-size:18px!important;}
+  #page-report .rc-info-bar{padding:6px 12px!important;gap:10px!important;}
+  #page-report .rc-info-bar img{width:38px!important;height:48px!important;}
+  #page-report .ri-item .ri-v{font-size:11px!important;}
+  #page-report .ri-item .ri-l{font-size:8px!important;}
+  #page-report .rc-sec{padding-top:6px!important;}
+  #page-report .rc-sec-title{padding:0 12px 4px!important;margin-bottom:2px!important;font-size:9.5px!important;}
+  #page-report .rc-sec-domains{padding:4px 12px 4px!important;margin-top:4px!important;}
+  #page-report .rc-comments{margin-top:0!important;}
+  #page-report .rc-comment-col{padding:6px 12px!important;}
+  #page-report .rc-comment-col .rc-sec-title{padding:0!important;margin-bottom:3px!important;}
+  #page-report textarea{min-height:26px!important;font-size:9.5px!important;padding:4px 6px!important;line-height:1.25!important;}
+  #page-report .rc-gradekey{padding:6px 12px!important;gap:5px!important;}
+  #page-report .rc-gradekey span{padding:1px 6px!important;font-size:9px!important;}
+  #page-report .rc-footer{padding:6px 12px!important;}
+  #page-report .rc-footer div{font-size:9.5px!important;}
 }
 </style>
 </head>
@@ -1688,14 +1710,24 @@ async function viewReport(stuId){
 
   const rowPalette=["#F0FDF4","#EFF6FF","#FEF3C7","#F5F3FF","#FCE7F3","#ECFEFF","#FFF7ED","#F0FDFA","#FDF2F8"];
   function domainRows(){
-    return DOMAIN_TRAITS.map((t,i)=>{
-      const n=data.psycho[t]||0;
-      return`<tr style="background:${rowPalette[i%rowPalette.length]}">
-        <td style="padding:5px 10px;font-size:11px;color:var(--navy);font-weight:600">${t}</td>
-        <td style="padding:5px 10px;text-align:center">
-          <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:20px;border-radius:4px;background:${n?"var(--gold)":"#E2E8F0"};color:${n?"var(--navy)":"var(--slate)"};font-size:12px;font-weight:800">${n||"–"}</span>
-        </td></tr>`;
-    }).join("");
+    // compact grid: 3 trait/rating pairs per row instead of 1 per row
+    const cols=3;
+    let html="";
+    for(let i=0;i<DOMAIN_TRAITS.length;i+=cols){
+      const chunk=DOMAIN_TRAITS.slice(i,i+cols);
+      html+="<tr>"+chunk.map((t,j)=>{
+        const idx=i+j;
+        const n=data.psycho[t]||0;
+        const bg=rowPalette[idx%rowPalette.length];
+        return`<td style="background:${bg};padding:4px 8px;font-size:10.5px;color:var(--navy);font-weight:600;white-space:nowrap">${t}</td>
+          <td style="background:${bg};padding:4px 8px;text-align:center;width:26px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:18px;border-radius:4px;background:${n?"var(--gold)":"#E2E8F0"};color:${n?"var(--navy)":"var(--slate)"};font-size:11px;font-weight:800">${n||"–"}</span>
+          </td>`;
+      }).join("")
+      +(chunk.length<cols?`<td colspan="${(cols-chunk.length)*2}"></td>`:"")
+      +"</tr>";
+    }
+    return html;
   }
 
   const pinkPalette=["#FDF2F8","#FCE7F3","#FBCFE8","#FDF2F8","#FCE7F3","#FBCFE8"];
@@ -1762,8 +1794,8 @@ async function viewReport(stuId){
         </table>
       </div>
     </div>
-    <div style="padding:16px 0 0">
-      <div style="font-size:11px;font-weight:700;color:#DB2777;text-transform:uppercase;letter-spacing:1px;padding:0 16px 8px">Academic Performance</div>
+    <div class="rc-sec" style="padding:16px 0 0">
+      <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:#DB2777;text-transform:uppercase;letter-spacing:1px;padding:0 16px 8px">Academic Performance</div>
       <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="background:#DB2777">
           <th style="padding:9px 14px;text-align:left;font-size:11px;color:#fff">Subject</th>
@@ -1775,27 +1807,27 @@ async function viewReport(stuId){
           <th style="padding:9px 14px;text-align:left;font-size:11px;color:#fff">Comment</th>
         </tr></thead><tbody>${scoresHtml}</tbody></table></div>
     </div>
-    <div style="border-top:1px solid var(--border);margin-top:10px;padding:8px 16px 6px">
-      <div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Domains</div>
+    <div class="rc-sec rc-sec-domains" style="border-top:1px solid var(--border);margin-top:10px;padding:8px 16px 6px">
+      <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Domains</div>
       <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><tbody>${domainRows()}</tbody></table></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border)">
-      <div style="padding:14px 16px;border-right:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:700;color:var(--royal);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Class Teacher's Comment</div>
+    <div class="rc-comments" style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border)">
+      <div class="rc-comment-col" style="padding:14px 16px;border-right:1px solid var(--border)">
+        <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:var(--royal);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Class Teacher's Comment</div>
         <textarea id="ct-comment" placeholder="Enter class teacher's comment…">${data.ctComment||""}</textarea>
       </div>
-      <div style="padding:14px 16px">
-        <div style="font-size:11px;font-weight:700;color:var(--royal);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Principal's Comment <span style="font-weight:400;color:var(--slate);font-size:10px">(auto-filled, editable)</span></div>
+      <div class="rc-comment-col" style="padding:14px 16px">
+        <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:var(--royal);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Principal's Comment <span style="font-weight:400;color:var(--slate);font-size:10px">(auto-filled, editable)</span></div>
         <textarea id="pc-comment">${data.pcComment||autoPrincipalComment(Number(avg))}</textarea>
       </div>
     </div>
-    <div style="background:#F0FDF4;padding:12px 18px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+    <div class="rc-gradekey" style="background:#F0FDF4;padding:12px 18px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px;align-items:center">
       <span style="font-size:11px;font-weight:700;color:var(--slate);margin-right:4px">GRADE KEY:</span>
       ${[["A1","75–100","Excellent","#16A34A"],["B2","70–74","Very Good","#16A34A"],["B3","65–69","Good","#2563EB"],
          ["C4-C6","50–64","Credit","#2563EB"],["D7-E8","40–49","Pass","#D97706"],["F9","0–39","Fail","#DC2626"]]
          .map(([g,r,l,c])=>`<span style="background:${c}15;color:${c};border-radius:5px;padding:2px 8px;font-size:11px;font-weight:700">${g}: ${r} (${l})</span>`).join("")}
     </div>
-    <div style="background:linear-gradient(135deg,#1D4ED8,#1E3A8A);padding:10px 20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
+    <div class="rc-footer" style="background:linear-gradient(135deg,#1D4ED8,#1E3A8A);padding:10px 20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
       <div style="color:#DBEAFE;font-size:12px;font-weight:600">Next term begins: <b style="color:#fff">_________________</b></div>
       <div style="color:#DBEAFE;font-size:12px;font-weight:600">Approved by: <b style="color:#fff">King's Pearls Learning Field</b></div>
     </div>`;
