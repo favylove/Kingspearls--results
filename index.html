@@ -150,13 +150,14 @@ tr:nth-child(even) td{background:#F8FAFF;}
 .loading-row{text-align:center;padding:30px;color:var(--slate);}
 
 @media print{
+  html,body{width:210mm!important;min-width:210mm!important;}
   #login-wrap,#pending-wrap,#nav,#page-dashboard,#page-results,#page-students,#page-teachers,
   #page-register,#page-cumulative,.no-print,.btn-row{display:none!important;}
-  #page-report{display:block!important;padding:0!important;}
+  #page-report{display:block!important;max-width:100%!important;margin:0!important;padding:0!important;}
   .card{box-shadow:none!important;border:none!important;}
   body{background:#DCEBFF;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   @page{size:A4;margin:0;}
-  #page-report{padding:8mm!important;background:#DCEBFF;}
+  #page-report{padding:8mm!important;width:210mm!important;max-width:210mm!important;margin:0!important;background:#DCEBFF;box-sizing:border-box!important;}
   #page-report .card{padding:8px 10px!important;margin-bottom:6px!important;}
   #page-report table th,#page-report table td{padding:4px 8px!important;font-size:10.5px!important;}
   #page-report .domain-row{padding:2px 0!important;font-size:10.5px!important;}
@@ -182,10 +183,8 @@ tr:nth-child(even) td{background:#F8FAFF;}
   #page-report .rc-sec{padding-top:6px!important;}
   #page-report .rc-sec-title{padding:0 12px 4px!important;margin-bottom:2px!important;font-size:9.5px!important;}
   #page-report .rc-sec-domains{padding:4px 12px 4px!important;margin-top:4px!important;}
-  #page-report .rc-stat-row{padding:4px 12px 0!important;gap:5px!important;}
-  #page-report .rc-stat-row>div{padding:4px 8px!important;}
-  #page-report .rc-stat-row div[style*="font-size:9.5px"]{font-size:7px!important;}
-  #page-report .rc-stat-row div[style*="font-size:18px"]{font-size:12px!important;}
+  #page-report .rc-stat-row{padding:4px 12px 0!important;}
+  #page-report .rc-stat-row td,#page-report .rc-sec-domains td{padding:3px 8px!important;font-size:9px!important;}
   #page-report .rc-comments{margin-top:0!important;}
   #page-report .rc-comment-col{padding:6px 12px!important;}
   #page-report .rc-comment-col .rc-sec-title{padding:0!important;margin-bottom:3px!important;}
@@ -1756,6 +1755,13 @@ async function viewReport(stuId){
       }
     }catch(e){ /* term doc may not exist yet — leave blank */ }
   }));
+  // cumulative average across every term recorded so far this session
+  const ALL_TERMS_ORDER=["First Term","Second Term","Third Term"];
+  const termAvgs=ALL_TERMS_ORDER.map(t=>{
+    const vals=subs.map(sub=>(termTotals[sub]||{})[t]).filter(v=>v!=null);
+    return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+  }).filter(v=>v!=null);
+  const cumulativeAverage=termAvgs.length?(termAvgs.reduce((a,b)=>a+b,0)/termAvgs.length).toFixed(1):avg;
 
   const classStu=students.filter(s=>s.class===stu.class);
   const classAvgs=classStu.map(s=>{
@@ -1771,40 +1777,36 @@ async function viewReport(stuId){
 
   const rowPalette=["#F0FDF4","#EFF6FF","#FEF3C7","#F5F3FF","#FCE7F3","#ECFEFF","#FFF7ED","#F0FDFA","#FDF2F8"];
   function domainRows(){
-    // compact grid: 3 trait/rating pairs per row instead of 1 per row
-    const cols=3;
+    // plain rectangular 2-column table: Domain | Rating, one trait per row, no colour variety
+    const half=Math.ceil(DOMAIN_TRAITS.length/2);
+    const left=DOMAIN_TRAITS.slice(0,half), right=DOMAIN_TRAITS.slice(half);
+    const cell=(t)=>{
+      if(t==null) return `<td style="border:1.5px solid var(--navy)"></td><td style="border:1.5px solid var(--navy)"></td>`;
+      const n=data.psycho[t]||0;
+      return`<td style="padding:4px 8px;font-size:10.5px;color:var(--navy);font-weight:600;border:1.5px solid var(--navy);background:#fff">${t}</td>
+        <td style="padding:4px 8px;text-align:center;font-weight:800;font-size:11px;color:var(--navy);border:1.5px solid var(--navy);background:#fff;width:36px">${n||"–"}</td>`;
+    };
     let html="";
-    for(let i=0;i<DOMAIN_TRAITS.length;i+=cols){
-      const chunk=DOMAIN_TRAITS.slice(i,i+cols);
-      html+="<tr>"+chunk.map((t,j)=>{
-        const idx=i+j;
-        const n=data.psycho[t]||0;
-        const bg=rowPalette[idx%rowPalette.length];
-        return`<td style="background:${bg};padding:4px 8px;font-size:10.5px;color:var(--navy);font-weight:600;white-space:nowrap">${t}</td>
-          <td style="background:${bg};padding:4px 8px;text-align:center;width:26px">
-            <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:18px;border-radius:4px;background:${n?"var(--gold)":"#E2E8F0"};color:${n?"var(--navy)":"var(--slate)"};font-size:11px;font-weight:800">${n||"–"}</span>
-          </td>`;
-      }).join("")
-      +(chunk.length<cols?`<td colspan="${(cols-chunk.length)*2}"></td>`:"")
-      +"</tr>";
+    for(let i=0;i<left.length;i++){
+      html+=`<tr>${cell(left[i])}${cell(right[i])}</tr>`;
     }
     return html;
   }
 
-  const termCell=v=>`<td style="padding:9px 10px;color:var(--slate);text-align:center;font-size:12px;border:2px solid var(--navy)">${v==null?"–":v}</td>`;
+  const termCell=v=>`<td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:10.5px;border:1.5px solid var(--navy)">${v==null?"–":v}</td>`;
   let scoresHtml=rows.length===0
     ?`<tr><td colspan="9" style="text-align:center;padding:36px;color:var(--slate)">No results recorded for ${currentTerm}.</td></tr>`
     :rows.map((r,i)=>{
       const gi=gradeInfo(r.tot);
       const tt=termTotals[r.subject]||{};
       return`<tr style="background:#fff">
-        <td style="padding:9px 14px;font-weight:800;border:2px solid var(--navy)">${r.subject}</td>
-        <td style="padding:9px 14px;color:var(--slate);text-align:center;border:2px solid var(--navy)">${r.ca||"–"}</td>
-        <td style="padding:9px 14px;color:var(--slate);text-align:center;border:2px solid var(--navy)">${r.exam||"–"}</td>
-        <td style="padding:9px 14px;font-weight:800;text-align:center;border:2px solid var(--navy)">${r.tot}</td>
-        <td style="padding:9px 14px;text-align:center;border:2px solid var(--navy)"><span class="badge" style="background:${gi.color}18;color:${gi.color}">${gi.grade}</span></td>
+        <td style="padding:4px 8px;font-weight:800;font-size:11.5px;border:1.5px solid var(--navy)">${r.subject}</td>
+        <td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:11px;border:1.5px solid var(--navy)">${r.ca||"–"}</td>
+        <td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:11px;border:1.5px solid var(--navy)">${r.exam||"–"}</td>
+        <td style="padding:4px 6px;font-weight:800;text-align:center;font-size:11px;border:1.5px solid var(--navy)">${r.tot}</td>
+        <td style="padding:4px 6px;text-align:center;border:1.5px solid var(--navy)"><span class="badge" style="background:${gi.color}18;color:${gi.color};font-size:10px;padding:2px 6px">${gi.grade}</span></td>
         ${termCell(tt["First Term"])}${termCell(tt["Second Term"])}${termCell(tt["Third Term"])}
-        <td style="padding:9px 14px;color:${gi.color};font-weight:700;border:2px solid var(--navy)">${gi.remark}</td></tr>`;
+        <td style="padding:4px 8px;color:${gi.color};font-weight:700;font-size:11px;border:1.5px solid var(--navy)">${gi.remark}</td></tr>`;
     }).join("");
 
   document.getElementById("rc-inner").innerHTML=`
@@ -1848,36 +1850,37 @@ async function viewReport(stuId){
     </div>
     <div class="rc-sec" style="padding:16px 0 0">
       <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:#DB2777;text-transform:uppercase;letter-spacing:1px;padding:0 16px 8px">Academic Performance</div>
-      <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;font-size:13px;border:2px solid var(--navy)">
+      <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;font-size:11px;border:1.5px solid var(--navy)">
         <thead><tr style="background:#DB2777">
-          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#fff;border:2px solid var(--navy)">Subject</th>
-          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#fff;border:2px solid var(--navy)">CA(40)</th>
-          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#fff;border:2px solid var(--navy)">Exam(60)</th>
-          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#fff;border:2px solid var(--navy)">Total</th>
-          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#fff;border:2px solid var(--navy)">Grade</th>
-          <th style="padding:9px 10px;text-align:center;font-size:10px;color:#fff;border:2px solid var(--navy)">1st Term</th>
-          <th style="padding:9px 10px;text-align:center;font-size:10px;color:#fff;border:2px solid var(--navy)">2nd Term</th>
-          <th style="padding:9px 10px;text-align:center;font-size:10px;color:#fff;border:2px solid var(--navy)">3rd Term</th>
-          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#fff;border:2px solid var(--navy)">Remark</th>
+          <th style="padding:5px 8px;text-align:left;font-size:10px;color:#fff;border:1.5px solid var(--navy)">Subject</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;color:#fff;border:1.5px solid var(--navy)">CA(40)</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;color:#fff;border:1.5px solid var(--navy)">Exam(60)</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;color:#fff;border:1.5px solid var(--navy)">Total</th>
+          <th style="padding:5px 8px;text-align:center;font-size:10px;color:#fff;border:1.5px solid var(--navy)">Grade</th>
+          <th style="padding:5px 6px;text-align:center;font-size:9px;color:#fff;border:1.5px solid var(--navy)">1st Term</th>
+          <th style="padding:5px 6px;text-align:center;font-size:9px;color:#fff;border:1.5px solid var(--navy)">2nd Term</th>
+          <th style="padding:5px 6px;text-align:center;font-size:9px;color:#fff;border:1.5px solid var(--navy)">3rd Term</th>
+          <th style="padding:5px 8px;text-align:left;font-size:10px;color:#fff;border:1.5px solid var(--navy)">Remark</th>
         </tr></thead><tbody>${scoresHtml}</tbody></table></div>
     </div>
-    <div class="rc-sec rc-stat-row" style="padding:8px 16px 0;display:flex;flex-wrap:wrap;gap:8px">
-      <div style="flex:1;min-width:150px;background:var(--navy);border-radius:8px;padding:8px 12px;text-align:center">
-        <div style="font-size:9.5px;color:#DBEAFE;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Class Average</div>
-        <div style="font-size:18px;font-weight:900;color:#fff">${classAverage}%</div>
-      </div>
-      <div style="flex:1;min-width:150px;background:var(--navy);border-radius:8px;padding:8px 12px;text-align:center">
-        <div style="font-size:9.5px;color:#DBEAFE;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Child's Average</div>
-        <div style="font-size:18px;font-weight:900;color:#fff">${avg}%</div>
-      </div>
-      <div style="flex:1;min-width:150px;background:#DB2777;border-radius:8px;padding:8px 12px;text-align:center">
-        <div style="font-size:9.5px;color:#FCE7F3;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Overall Average Summary</div>
-        <div style="font-size:18px;font-weight:900;color:#fff">${ogi.grade} – ${ogi.remark}</div>
-      </div>
+    <div class="rc-sec rc-stat-row" style="padding:8px 16px 0">
+      <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Result Summary</div>
+      <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;border:1.5px solid var(--navy)"><tbody>
+        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff;width:50%">Total Score</td>
+            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${totalScore}</td></tr>
+        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff">Class Average</td>
+            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${classAverage}%</td></tr>
+        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff">Child's Average</td>
+            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${avg}%</td></tr>
+        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff">Cumulative Average</td>
+            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${cumulativeAverage}%</td></tr>
+        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff">Overall Average Summary</td>
+            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${ogi.grade} – ${ogi.remark}</td></tr>
+      </tbody></table></div>
     </div>
     <div class="rc-sec rc-sec-domains" style="border-top:1px solid var(--border);margin-top:10px;padding:8px 16px 6px">
       <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Domains</div>
-      <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><tbody>${domainRows()}</tbody></table></div>
+      <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;border:1.5px solid var(--navy)"><tbody>${domainRows()}</tbody></table></div>
     </div>
     <div class="rc-comments" style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border)">
       <div class="rc-comment-col" style="padding:14px 16px;border-right:1px solid var(--border)">
