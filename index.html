@@ -16,6 +16,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,sans-serif;background:#F0F4FF;color:#1E293B;min-height:100vh;}
@@ -150,14 +152,14 @@ tr:nth-child(even) td{background:#F8FAFF;}
 .loading-row{text-align:center;padding:30px;color:var(--slate);}
 
 @media print{
-  html,body{width:210mm!important;min-width:210mm!important;}
+  html,body{width:794px!important;min-width:794px!important;}
   #login-wrap,#pending-wrap,#nav,#page-dashboard,#page-results,#page-students,#page-teachers,
   #page-register,#page-cumulative,.no-print,.btn-row{display:none!important;}
   #page-report{display:block!important;max-width:100%!important;margin:0!important;padding:0!important;}
   .card{box-shadow:none!important;border:none!important;}
   body{background:#DCEBFF;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   @page{size:A4;margin:0;}
-  #page-report{padding:8mm!important;width:210mm!important;max-width:210mm!important;margin:0!important;background:#DCEBFF;box-sizing:border-box!important;}
+  #page-report{padding:30px!important;width:794px!important;max-width:794px!important;margin:0!important;background:#DCEBFF;box-sizing:border-box!important;}
   #page-report .card{padding:8px 10px!important;margin-bottom:6px!important;}
   #page-report table th,#page-report table td{padding:4px 8px!important;font-size:10.5px!important;}
   #page-report .domain-row{padding:2px 0!important;font-size:10.5px!important;}
@@ -165,9 +167,9 @@ tr:nth-child(even) td{background:#F8FAFF;}
   #page-report .rc-info-bar,#page-report thead{page-break-inside:avoid;}
 
   /* ── report-card compaction for one-page print ── */
-  #rc-inner{max-width:100%!important;border:none!important;box-shadow:none!important;border-radius:0!important;}
-  #page-report .rc-header{padding:0!important;}
-  #page-report .rc-header>div:first-child{padding:6px 12px 5px!important;gap:8px!important;}
+  #rc-inner{max-width:100%!important;width:100%!important;border:none!important;box-shadow:none!important;border-radius:0!important;}
+  #page-report .rc-header{padding:0!important;width:100%!important;}
+  #page-report .rc-header>div:first-child{padding:6px 12px 5px!important;gap:8px!important;width:100%!important;display:flex!important;}
   #page-report .rc-header div[style*="font-size:32px"]{font-size:16px!important;}
   #page-report .rc-header div[style*="font-size:10.5px"]{font-size:7.5px!important;}
   #page-report .rc-header>div:first-child>img:nth-child(1){width:44px!important;height:44px!important;}
@@ -182,9 +184,9 @@ tr:nth-child(even) td{background:#F8FAFF;}
   #page-report .ri-item .ri-l{font-size:7.5px!important;}
   #page-report .rc-sec{padding-top:6px!important;}
   #page-report .rc-sec-title{padding:0 12px 4px!important;margin-bottom:2px!important;font-size:9.5px!important;}
-  #page-report .rc-sec-domains{padding:4px 12px 4px!important;margin-top:4px!important;}
-  #page-report .rc-stat-row{padding:4px 12px 0!important;}
-  #page-report .rc-stat-row td,#page-report .rc-sec-domains td{padding:3px 8px!important;font-size:9px!important;}
+  #page-report .rc-sec-domains-summary{padding:4px 12px 4px!important;margin-top:4px!important;}
+  #page-report .rc-sec-domains .rc-sec-title,#page-report .rc-stat-row .rc-sec-title{padding:3px 8px!important;margin-bottom:0!important;}
+  #page-report .rc-stat-row td,#page-report .rc-sec-domains td{padding:2px 6px!important;font-size:8.5px!important;}
   #page-report .rc-comments{margin-top:0!important;}
   #page-report .rc-comment-col{padding:6px 12px!important;}
   #page-report .rc-comment-col .rc-sec-title{padding:0!important;margin-bottom:3px!important;}
@@ -656,7 +658,8 @@ tr:nth-child(even) td{background:#F8FAFF;}
     <div class="btn-row no-print" style="margin-bottom:16px">
       <button class="btn btn-ghost btn-sm" onclick="closeReport()">← Back</button>
       <button class="btn btn-primary btn-sm" id="save-comments-btn" onclick="saveReportComments()">💾 Save Comments</button>
-      <button class="btn btn-gold btn-sm" onclick="window.print()">🖨️ Print / Save PDF</button>
+      <button class="btn btn-gold btn-sm" id="download-pdf-btn" onclick="downloadReportPDF()">⬇️ Download PDF</button>
+      <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨️ Print</button>
     </div>
     <div id="rc-inner" style="background:linear-gradient(160deg,#DCEBFF,#BFDBFE);border-radius:14px;border:2px solid var(--border);
       box-shadow:0 4px 20px rgba(13,27,62,.1);overflow:hidden;max-width:800px;margin:0 auto"></div>
@@ -1713,6 +1716,7 @@ function autoPrincipalComment(avg){
 }
 
 let currentReportStudentId=null;
+let currentReportAvg=0;
 async function viewReport(stuId){
   const stu=students.find(s=>s.id===stuId); if(!stu) return;
   currentReportStudentId=stuId;
@@ -1731,6 +1735,7 @@ async function viewReport(stuId){
   }).filter(r=>r.ca+r.exam>0);
   const totalScore=rows.reduce((a,r)=>a+r.tot,0);
   const avg=rows.length?(totalScore/rows.length).toFixed(1):0;
+  currentReportAvg=Number(avg);
   const ogi=gradeInfo(Number(avg));
 
   // fetch this student's totals for every term in the current session, per subject
@@ -1777,20 +1782,14 @@ async function viewReport(stuId){
 
   const rowPalette=["#F0FDF4","#EFF6FF","#FEF3C7","#F5F3FF","#FCE7F3","#ECFEFF","#FFF7ED","#F0FDFA","#FDF2F8"];
   function domainRows(){
-    // plain rectangular 2-column table: Domain | Rating, one trait per row, no colour variety
-    const half=Math.ceil(DOMAIN_TRAITS.length/2);
-    const left=DOMAIN_TRAITS.slice(0,half), right=DOMAIN_TRAITS.slice(half);
-    const cell=(t)=>{
-      if(t==null) return `<td style="border:1.5px solid var(--navy)"></td><td style="border:1.5px solid var(--navy)"></td>`;
+    // narrow single-column table: one trait per row (more rows, less width), rating cell filled navy
+    return DOMAIN_TRAITS.map(t=>{
       const n=data.psycho[t]||0;
-      return`<td style="padding:4px 8px;font-size:10.5px;color:var(--navy);font-weight:600;border:1.5px solid var(--navy);background:#fff">${t}</td>
-        <td style="padding:4px 8px;text-align:center;font-weight:800;font-size:11px;color:var(--navy);border:1.5px solid var(--navy);background:#fff;width:36px">${n||"–"}</td>`;
-    };
-    let html="";
-    for(let i=0;i<left.length;i++){
-      html+=`<tr>${cell(left[i])}${cell(right[i])}</tr>`;
-    }
-    return html;
+      return `<tr>
+        <td style="padding:3px 8px;font-size:10px;color:var(--navy);font-weight:600;border:1px solid var(--navy);background:#fff">${t}</td>
+        <td style="padding:3px 8px;text-align:center;font-weight:800;font-size:10.5px;color:#fff;border:1px solid var(--navy);background:var(--navy);width:28px">${n||"–"}</td>
+      </tr>`;
+    }).join("");
   }
 
   const termCell=v=>`<td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:10.5px;border:1.5px solid var(--navy)">${v==null?"–":v}</td>`;
@@ -1863,24 +1862,28 @@ async function viewReport(stuId){
           <th style="padding:5px 8px;text-align:left;font-size:10px;color:#fff;border:1.5px solid var(--navy)">Remark</th>
         </tr></thead><tbody>${scoresHtml}</tbody></table></div>
     </div>
-    <div class="rc-sec rc-stat-row" style="padding:8px 16px 0">
-      <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Result Summary</div>
-      <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;border:1.5px solid var(--navy)"><tbody>
-        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff;width:50%">Total Score</td>
-            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${totalScore}</td></tr>
-        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff">Class Average</td>
-            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${classAverage}%</td></tr>
-        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff">Child's Average</td>
-            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${avg}%</td></tr>
-        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff">Cumulative Average</td>
-            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${cumulativeAverage}%</td></tr>
-        <tr><td style="padding:5px 10px;font-size:10.5px;font-weight:700;color:var(--navy);border:1.5px solid var(--navy);background:#fff">Overall Average Summary</td>
-            <td style="padding:5px 10px;font-size:12px;font-weight:900;color:var(--navy);border:1.5px solid var(--navy);background:#fff;text-align:center">${ogi.grade} – ${ogi.remark}</td></tr>
-      </tbody></table></div>
-    </div>
-    <div class="rc-sec rc-sec-domains" style="border-top:1px solid var(--border);margin-top:10px;padding:8px 16px 6px">
-      <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Domains</div>
-      <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;border:1.5px solid var(--navy)"><tbody>${domainRows()}</tbody></table></div>
+    <div class="rc-sec rc-sec-domains-summary" style="border-top:1px solid var(--border);margin-top:10px;padding:8px 16px 6px">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <div class="rc-sec-domains" style="flex:1;min-width:0">
+          <div class="rc-sec-title" style="font-size:10.5px;font-weight:700;color:#fff;background:var(--navy);text-transform:uppercase;letter-spacing:1px;padding:4px 8px;margin-bottom:0;border:1px solid var(--navy)">Domains</div>
+          <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;border:1px solid var(--navy);border-top:none"><tbody>${domainRows()}</tbody></table></div>
+        </div>
+        <div class="rc-stat-row" style="flex:1;min-width:0">
+          <div class="rc-sec-title" style="font-size:10.5px;font-weight:700;color:#fff;background:var(--navy);text-transform:uppercase;letter-spacing:1px;padding:4px 8px;margin-bottom:0;border:1px solid var(--navy)">Result Summary</div>
+          <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;border:1px solid var(--navy);border-top:none"><tbody>
+            <tr><td style="padding:3px 8px;font-size:10px;font-weight:700;color:var(--navy);border:1px solid var(--navy);background:#fff">Total Score</td>
+                <td style="padding:3px 8px;font-size:10.5px;font-weight:900;color:var(--navy);border:1px solid var(--navy);background:#fff;text-align:center;width:60px">${totalScore}</td></tr>
+            <tr><td style="padding:3px 8px;font-size:10px;font-weight:700;color:var(--navy);border:1px solid var(--navy);background:#fff">Class Average</td>
+                <td style="padding:3px 8px;font-size:10.5px;font-weight:900;color:var(--navy);border:1px solid var(--navy);background:#fff;text-align:center">${classAverage}%</td></tr>
+            <tr><td style="padding:3px 8px;font-size:10px;font-weight:700;color:var(--navy);border:1px solid var(--navy);background:#fff">Child's Average</td>
+                <td style="padding:3px 8px;font-size:10.5px;font-weight:900;color:var(--navy);border:1px solid var(--navy);background:#fff;text-align:center">${avg}%</td></tr>
+            <tr><td style="padding:3px 8px;font-size:10px;font-weight:700;color:var(--navy);border:1px solid var(--navy);background:#fff">Cumulative Average</td>
+                <td style="padding:3px 8px;font-size:10.5px;font-weight:900;color:var(--navy);border:1px solid var(--navy);background:#fff;text-align:center">${cumulativeAverage}%</td></tr>
+            <tr><td style="padding:4px 8px;font-size:10px;font-weight:800;color:#fff;border:1px solid var(--navy);background:var(--navy)">Overall Average Summary</td>
+                <td style="padding:4px 8px;font-size:10.5px;font-weight:900;color:#fff;border:1px solid var(--navy);background:var(--navy);text-align:center">${ogi.grade} – ${ogi.remark}</td></tr>
+          </tbody></table></div>
+        </div>
+      </div>
     </div>
     <div class="rc-comments" style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border)">
       <div class="rc-comment-col" style="padding:14px 16px;border-right:1px solid var(--border)">
@@ -1889,7 +1892,8 @@ async function viewReport(stuId){
       </div>
       <div class="rc-comment-col" style="padding:14px 16px">
         <div class="rc-sec-title" style="font-size:11px;font-weight:700;color:var(--royal);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Principal's Comment</div>
-        <textarea id="pc-comment">${data.pcComment||autoPrincipalComment(Number(avg))}</textarea>
+        <textarea id="pc-comment" readonly style="background:#F3F4F6;color:var(--navy);cursor:not-allowed">${autoPrincipalComment(Number(avg))}</textarea>
+        <div class="no-print" style="font-size:9.5px;color:var(--slate);margin-top:4px;font-style:italic">Auto-generated from the student's average — not editable.</div>
       </div>
     </div>
     <div class="rc-gradekey" style="background:#F0FDF4;padding:12px 18px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:8px;align-items:center">
@@ -1909,7 +1913,7 @@ async function saveReportComments(){
   if(!currentReportStudentId) return;
   const data=resultsCache[resultDocId(currentReportStudentId)]; if(!data) return;
   data.ctComment=document.getElementById("ct-comment").value;
-  data.pcComment=document.getElementById("pc-comment").value;
+  data.pcComment=autoPrincipalComment(currentReportAvg); // always auto — overwrites any old custom/typo'd comment
   const btn=document.getElementById("save-comments-btn");
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   try{ await saveResultDoc(currentReportStudentId); showToast("✓ Comments saved!"); }
@@ -1919,6 +1923,36 @@ async function saveReportComments(){
 function closeReport(){
   document.getElementById("rc-selector").style.display="block";
   document.getElementById("rc-view").style.display="none";
+}
+
+// ════════════════════════════════════════════
+//  DIRECT PDF DOWNLOAD (bypasses each phone's own
+//  "Print" service, which renders inconsistently
+//  across different Android brands/browsers — this
+//  draws the report card into a full-size A4 page
+//  the same way on every device.)
+// ════════════════════════════════════════════
+async function downloadReportPDF(){
+  const btn=document.getElementById("download-pdf-btn");
+  const el=document.getElementById("rc-inner");
+  if(!el || !window.html2canvas || !window.jspdf){ showToast("PDF library still loading, try again in a moment","err"); return; }
+  const origLabel=btn.innerHTML;
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Preparing…';
+  try{
+    const canvas=await html2canvas(el,{scale:2,useCORS:true,backgroundColor:"#DCEBFF"});
+    const imgData=canvas.toDataURL("image/jpeg",0.95);
+    const { jsPDF }=window.jspdf;
+    const pdf=new jsPDF({unit:"mm",format:"a4",orientation:"portrait"});
+    const pageW=210, pageH=297;
+    const imgW=pageW-16; // 8mm margin each side
+    const imgH=(canvas.height*imgW)/canvas.width;
+    const y=imgH<pageH-16?(pageH-imgH)/2:8;
+    pdf.addImage(imgData,"JPEG",8,y,imgW,imgH);
+    const stu=students.find(s=>s.id===currentReportStudentId);
+    const fname=stu?`${stu.lastName}_${stu.firstName}_ReportCard.pdf`.replace(/\s+/g,"_"):"ReportCard.pdf";
+    pdf.save(fname);
+  }catch(e){ console.error(e); showToast("Error generating PDF","err"); }
+  btn.disabled=false; btn.innerHTML=origLabel;
 }
 
 // ════════════════════════════════════════════
@@ -2255,6 +2289,22 @@ function showToast(msg,type){
   t.textContent=msg; t.className=type==="err"?"err":""; t.style.display="block";
   setTimeout(()=>t.style.display="none",2800);
 }
+
+// ════════════════════════════════════════════
+//  PRINT/PDF WIDTH FIX (mobile browsers otherwise
+//  lay the page out at the narrow phone viewport
+//  width, then stretch that onto a full A4 sheet —
+//  which is why the printed PDF looks tiny/off to
+//  one side on some phones). Forcing a fixed wide
+//  viewport just for the print/PDF pass fixes it.
+// ════════════════════════════════════════════
+(function(){
+  const vp=document.querySelector('meta[name="viewport"]');
+  if(!vp) return;
+  const original=vp.getAttribute("content");
+  window.addEventListener("beforeprint",()=>vp.setAttribute("content","width=794"));
+  window.addEventListener("afterprint",()=>vp.setAttribute("content",original));
+})();
 </script>
 </body>
 </html>
