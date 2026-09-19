@@ -1,0 +1,11 @@
+{
+  "name": "PEARLSIFY",
+  "short_name": "PEARLSIFY",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F0F4FF",
+  "theme_color": "#16A34A",
+  "icons": [
+    { "src": "icon-512.jpg", "sizes": "512x512", "type": "image/jpeg" }
+  ]
+}
