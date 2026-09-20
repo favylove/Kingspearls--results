@@ -634,7 +634,7 @@ tr:nth-child(even) td{background:#F8FAFF;}
     <!-- Bulk -->
     <div id="add-bulk" style="display:none">
       <div class="fg"><label class="lbl">Class for all students</label>
-        <select id="bulk-cls" onchange="toggleDeptField('bulk-dept-row',this.value)"></select></div>
+        <select id="bulk-cls" onchange="toggleDeptField('bulk-dept-row',this.value);document.getElementById('bulk-preview').textContent='';"></select></div>
       <div id="bulk-dept-row" style="display:none">
         <div class="fg"><label class="lbl">Department (for SSS)</label>
           <select id="bulk-dept">
@@ -646,7 +646,7 @@ tr:nth-child(even) td{background:#F8FAFF;}
       </div>
       <div class="fg">
         <label class="lbl">Paste names (one per line, format: <b>Firstname Lastname</b>)</label>
-        <textarea id="bulk-names" placeholder="e.g.&#10;Adaeze Okafor&#10;Emeka Nwosu&#10;Fatimah Bello" style="min-height:140px;font-size:14px"></textarea>
+        <textarea id="bulk-names" oninput="document.getElementById('bulk-preview').textContent='';" placeholder="e.g.&#10;Adaeze Okafor&#10;Emeka Nwosu&#10;Fatimah Bello" style="min-height:140px;font-size:14px"></textarea>
       </div>
       <div id="bulk-preview" style="font-size:12px;color:var(--slate);margin-bottom:10px"></div>
       <div class="btn-row">
@@ -1650,6 +1650,8 @@ async function confirmRename(){
 function toggleAddForm(){
   const f=document.getElementById("add-form");
   f.style.display=f.style.display==="none"?"block":"none";
+  const preview=document.getElementById("bulk-preview");
+  if(preview) preview.textContent="";
 }
 function toggleDeptField(rowId,cls){
   const row=document.getElementById(rowId);
