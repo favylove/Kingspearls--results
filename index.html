@@ -764,6 +764,18 @@ tr:nth-child(even) td{background:#F8FAFF;}
       <div id="backup-status" style="margin-top:10px;font-size:12.5px;color:var(--slate)"></div>
     </div>
 
+    <div class="card" style="margin-top:14px;border:2px solid var(--gold)">
+      <div class="card-title">🧹 Fix: Remove Wrong Department From Junior Students</div>
+      <p style="color:var(--slate);font-size:13px;line-height:1.5;margin-bottom:14px">
+        A past bug saved "Sciences" as the department for some Basic 1–9 / Nursery students added through
+        Bulk Entry, even though only SSS students should have a department. Tap below to scan every
+        non-SSS student and clear that field wherever it was wrongly set. This is safe to run — it only
+        touches students outside SSS classes, and only if they currently have a department set.
+      </p>
+      <button class="btn btn-primary" id="cleanup-dept-btn" onclick="cleanupWrongDepartments()">🧹 Scan & Fix Now</button>
+      <div id="cleanup-dept-status" style="margin-top:10px;font-size:12.5px;color:var(--slate)"></div>
+    </div>
+
     <div class="card" style="margin-top:14px;border:2px solid var(--red)">
       <div class="card-title">Restore From Backup</div>
       <p style="color:var(--slate);font-size:13px;line-height:1.5;margin-bottom:14px">
@@ -2179,6 +2191,27 @@ function closeReport(){
 // ════════════════════════════════════════════
 //  FULL DATA BACKUP (admin)
 // ════════════════════════════════════════════
+// ── ONE-TIME CLEANUP: strip department from non-SSS students ────────────────
+async function cleanupWrongDepartments(){
+  const btn=document.getElementById("cleanup-dept-btn");
+  const status=document.getElementById("cleanup-dept-status");
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Scanning…';
+  try{
+    await loadStudents(); // make sure we're checking the latest data
+    const affected=students.filter(s=>!isSSSClass(s.class) && s.department);
+    if(!affected.length){
+      status.textContent="✓ Nothing to fix — no non-SSS student currently has a department set.";
+    }else{
+      status.textContent=`Fixing ${affected.length} student(s)…`;
+      await Promise.all(affected.map(s=>db.collection("students").doc(s.id).update({department:firebase.firestore.FieldValue.delete()})));
+      await loadStudents(); renderStudents();
+      status.textContent=`✓ Fixed ${affected.length} student(s): ${affected.map(s=>`${s.lastName||""} ${s.firstName||""}`.trim()).slice(0,10).join(", ")}${affected.length>10?", …":""}`;
+      showToast(`✓ Cleaned up ${affected.length} student(s)!`);
+    }
+  }catch(e){ console.error(e); status.textContent="Error running cleanup — check your connection and try again."; showToast("Error running cleanup","err"); }
+  btn.disabled=false; btn.innerHTML="🧹 Scan & Fix Now";
+}
+
 async function downloadFullBackup(){
   const btn=document.getElementById("backup-btn");
   const status=document.getElementById("backup-status");
