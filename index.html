@@ -509,15 +509,19 @@ tr:nth-child(even) td{background:#F8FAFF;}
     </div>
   </div>
   <div id="rename-form" class="card" style="display:none;border:2px solid var(--royal);margin-bottom:14px">
-    <div class="card-title">🔁 Rename Class Roster</div>
+    <div class="card-title">🔁 Rename / Replace Class Roster</div>
     <p style="color:var(--slate);font-size:13px;line-height:1.5;margin-bottom:10px">
-      Pick a class, then paste the real names — <b>one per line, in the exact order</b> shown in the current
-      roster below (the roster is sorted by last name). Nothing is changed until you review the preview and
-      tap Confirm.
+      Pick a class. If you're just <b>fixing names</b> for the same students, leave the box below unticked and
+      paste the real names one per line, in the exact order shown in the current roster (sorted by last name).
+      If some students have <b>left the school</b> and this is a whole new/different list, tick the box below instead.
     </p>
     <div class="fg"><label class="lbl">Class</label>
       <select id="rename-class" onchange="renderRenameCurrentRoster()"></select>
     </div>
+    <label style="display:flex;align-items:flex-start;gap:8px;background:#FEF2F2;border-radius:8px;padding:10px 12px;margin:10px 0;cursor:pointer;font-size:13px;color:var(--red)">
+      <input type="checkbox" id="rename-replace-mode" onchange="renderRenameCurrentRoster()" style="margin-top:2px;width:16px;height:16px;cursor:pointer"/>
+      <span>These are a <b>completely different set of students</b> (some old ones have left the school) — <b>remove everyone currently in this class</b> and add this new list instead, rather than matching names in order.</span>
+    </label>
     <div id="rename-current-roster" style="font-size:12.5px;color:var(--navy);background:#F0F4FF;border-radius:8px;padding:10px 12px;margin:10px 0;max-height:220px;overflow:auto;white-space:pre-line"></div>
     <div class="fg"><label class="lbl">Paste real names here (one per line)</label>
       <textarea id="rename-paste" rows="10" placeholder="SURNAME FirstName MiddleName&#10;SURNAME FirstName&#10;..."></textarea>
@@ -1539,8 +1543,40 @@ function previewRename(){
   const raw=document.getElementById("rename-paste").value.trim();
   const lines=raw.split("\n").map(l=>l.trim()).filter(l=>l.length>0);
   const box=document.getElementById("rename-preview");
-  if(!list.length){ box.innerHTML='<div class="err-box">Select a class with students first.</div>'; return; }
+  const replaceMode=document.getElementById("rename-replace-mode").checked;
   if(!lines.length){ box.innerHTML='<div class="err-box">Paste the new names first.</div>'; return; }
+
+  if(replaceMode){
+    const cls=document.getElementById("rename-class").value;
+    if(!cls){ box.innerHTML='<div class="err-box">Select a class first.</div>'; return; }
+    const oldNames=list.map(s=>`${s.lastName||""} ${s.firstName||""}`.trim()||"(unnamed)");
+    box.innerHTML=`
+      <div class="err-box" style="margin-bottom:10px">
+        ⚠️ This will <b>permanently delete ${list.length} current student(s)</b> in ${cls} — including any
+        results, comments, photos and ratings already saved for them — and add ${lines.length} new student(s)
+        instead. This cannot be undone unless you have a recent backup (Backup tab). Make sure that's done first
+        if these students have any saved results.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:150px">
+          <b style="font-size:12.5px;color:var(--red)">Will be REMOVED (${list.length}):</b>
+          <div style="max-height:220px;overflow:auto;font-size:12px;color:var(--slate);margin-top:4px">${oldNames.length?oldNames.join("<br/>"):"(none — class is already empty)"}</div>
+        </div>
+        <div style="flex:1;min-width:150px">
+          <b style="font-size:12.5px;color:var(--green)">Will be ADDED (${lines.length}):</b>
+          <div style="max-height:220px;overflow:auto;font-size:12px;color:var(--navy);margin-top:4px">${lines.join("<br/>")}</div>
+        </div>
+      </div>
+      <div class="fg" style="margin-top:12px"><label class="lbl">Type REPLACE below to enable the button</label>
+        <input type="text" id="replace-confirm-text" placeholder="REPLACE" oninput="document.getElementById('confirm-rename-btn').disabled=(this.value!=='REPLACE')"/>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="confirm-rename-btn" style="background:var(--red);color:#fff" disabled onclick="confirmRename()">⚠️ Remove ${list.length} & Add ${lines.length} New</button>
+      </div>`;
+    return;
+  }
+
+  if(!list.length){ box.innerHTML='<div class="err-box">Select a class with students first (or tick the box above if these are all new students).</div>'; return; }
   const n=Math.min(list.length,lines.length);
   let rows="";
   for(let i=0;i<n;i++){
@@ -1552,7 +1588,7 @@ function previewRename(){
   }
   let warn="";
   if(list.length!==lines.length){
-    warn=`<div class="err-box" style="margin-bottom:10px">⚠️ Current roster has ${list.length} student(s) but you pasted ${lines.length} name(s). Only the first ${n} will be matched/renamed — double check your order before confirming.</div>`;
+    warn=`<div class="err-box" style="margin-bottom:10px">⚠️ Current roster has ${list.length} student(s) but you pasted ${lines.length} name(s). Only the first ${n} will be matched/renamed — double check your order before confirming. If some students actually left the school, tick the box above instead.</div>`;
   }
   box.innerHTML=`${warn}
     <div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px">
@@ -1563,11 +1599,36 @@ function previewRename(){
     </div>`;
 }
 async function confirmRename(){
-  const list=currentRenameRoster();
+  const replaceMode=document.getElementById("rename-replace-mode").checked;
+  const btn=document.getElementById("confirm-rename-btn");
   const raw=document.getElementById("rename-paste").value.trim();
   const lines=raw.split("\n").map(l=>l.trim()).filter(l=>l.length>0);
+
+  if(replaceMode){
+    const cls=document.getElementById("rename-class").value;
+    const list=currentRenameRoster();
+    btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Replacing…';
+    try{
+      await Promise.all(list.map(s=>db.collection("students").doc(s.id).delete()));
+      const batchAdds=lines.map(line=>{
+        const parts=line.split(/\s+/);
+        const firstName=parts[0]||"", lastName=parts.slice(1).join(" ")||"";
+        return db.collection("students").add({firstName,lastName,class:cls,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+      });
+      await Promise.all(batchAdds);
+      await loadStudents(); renderStudents();
+      showToast(`✓ Class replaced — ${list.length} removed, ${lines.length} added!`);
+      document.getElementById("rename-paste").value="";
+      document.getElementById("rename-replace-mode").checked=false;
+      document.getElementById("rename-preview").innerHTML="";
+      renderRenameCurrentRoster();
+    }catch(e){ console.error(e); showToast("Error replacing class","err"); }
+    btn.disabled=false;
+    return;
+  }
+
+  const list=currentRenameRoster();
   const n=Math.min(list.length,lines.length);
-  const btn=document.getElementById("confirm-rename-btn");
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   try{
     const updates=[];
