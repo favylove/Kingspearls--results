@@ -940,10 +940,13 @@ function isSSSClass(cls){
   return c.includes("sss");
 }
 function classSection(cls){
-  // "secondary" = Basic 7-9 + all SSS. "primary" = everything else (Busy Bee, Pre/Nursery, Basic 1-6).
+  // "secondary" = Basic 7-9 + all SSS. "nursery" = Busy Bee/Pre Nursery/Nursery.
+  // "primary" = Basic 1-6.
   if(!cls) return "";
   if(isSSSClass(cls)) return "secondary";
-  const m=cls.toLowerCase().match(/basic\s*(\d+)/);
+  const c=cls.toLowerCase();
+  if(c.includes("busy bee")||c.includes("pre nursery")||c.includes("nursery")) return "nursery";
+  const m=c.match(/basic\s*(\d+)/);
   if(m) return parseInt(m[1],10)>=7?"secondary":"primary";
   return "primary";
 }
@@ -1773,7 +1776,7 @@ async function onClassChange(){
   const dept=document.getElementById("r-dept").value||"Sciences";
   let allSubs=getSubs(cls,dept);
   const notice=document.getElementById("r-subject-notice");
-  if(isAnyAdmin(currentUserProfile)){
+  if(isSuperAdmin(currentUserProfile)){
     notice.style.display="none";
     allSubs.forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;sub.appendChild(o);});
   }else{
@@ -2412,7 +2415,8 @@ async function loadTeachers(){
               <label style="font-size:11px;color:var(--slate)">Access limited to:</label>
               <select style="font-size:12px;padding:4px 6px;border-radius:6px;border:1px solid var(--border)" onchange="setAdminSection('${doc.id}',this.value)">
                 <option value="" ${!d.adminSection?"selected":""}>Full access (all classes)</option>
-                <option value="primary" ${d.adminSection==="primary"?"selected":""}>Primary only (Nursery – Basic 6)</option>
+                <option value="nursery" ${d.adminSection==="nursery"?"selected":""}>Nursery only (Busy Bee – Nursery 2)</option>
+                <option value="primary" ${d.adminSection==="primary"?"selected":""}>Primary only (Basic 1–6)</option>
                 <option value="secondary" ${d.adminSection==="secondary"?"selected":""}>Secondary only (Basic 7–9, SSS)</option>
               </select>
             </div>`:""}
@@ -2422,6 +2426,7 @@ async function loadTeachers(){
             ${d.status!=="rejected"&&d.role!=="admin"?`<button class="btn btn-red btn-sm" onclick="setTeacherStatus('${doc.id}','rejected')">✕ Reject</button>`:""}
             ${d.status==="approved"&&d.role!=="admin"?`<button class="btn btn-ghost btn-sm" onclick="setTeacherStatus('${doc.id}','pending')">↺ Revoke</button>`:""}
             ${d.status==="approved"&&d.role!=="admin"?`
+              <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','nursery')">⭐ Make Nursery Admin</button>
               <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','primary')">⭐ Make Primary Admin</button>
               <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','secondary')">⭐ Make Secondary Admin</button>
               <button class="btn btn-ghost btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','')">⭐ Make Full Admin</button>
@@ -2431,10 +2436,11 @@ async function loadTeachers(){
         </div>`;
       wrap.appendChild(card);
 
-      // add to dropdown (non-admin approved teachers)
-      if(d.role!=="admin"&&d.status==="approved"){
+      // add to dropdown: any approved non-superadmin (regular admins now need subject
+      // assignments too, same as teachers — see getAssignedSubjects)
+      if(!d.isSuperAdmin&&d.status==="approved"){
         const o=document.createElement("option");
-        o.value=doc.id; o.textContent=d.name||d.email; sel.appendChild(o);
+        o.value=doc.id; o.textContent=(d.name||d.email||"")+(d.role==="admin"?" (Admin)":""); sel.appendChild(o);
       }
     });
   }catch(e){ console.error(e); document.getElementById("teachers-loading").textContent="Error loading accounts."; }
@@ -2528,7 +2534,7 @@ async function saveAssignment(){
 
 // ── FILTER SUBJECTS FOR TEACHER ─────────────────────────────────────────────
 async function getAssignedSubjects(cls){
-  if(isAnyAdmin(currentUserProfile)) return null; // admins see all subjects for classes they can access
+  if(isSuperAdmin(currentUserProfile)) return null; // only super admins see/edit every subject with no assignment needed
   try{
     const snap=await db.collection("assignments")
       .where("teacherId","==",currentUserProfile.uid)
@@ -2542,7 +2548,7 @@ async function setTeacherStatus(uid,status){
   catch(e){ showToast("Error updating account","err"); }
 }
 async function setTeacherAdmin(uid,makeAdmin,name,section){
-  const sectionLabel=section==="primary"?"PRIMARY ONLY (Nursery–Basic 6)":section==="secondary"?"SECONDARY ONLY (Basic 7–9, SSS)":"FULL ACCESS (all classes)";
+  const sectionLabel=section==="nursery"?"NURSERY ONLY (Busy Bee–Nursery 2)":section==="primary"?"PRIMARY ONLY (Basic 1–6)":section==="secondary"?"SECONDARY ONLY (Basic 7–9, SSS)":"FULL ACCESS (all classes)";
   const msg=makeAdmin
     ? `Make ${name} an ADMIN with ${sectionLabel}? ${section?"They will not be able to see or edit students, results, or report cards for classes outside this section.":"They will be able to manage students and results for every class."}`
     : `Remove admin access from ${name}? They will become a regular teacher again.`;
