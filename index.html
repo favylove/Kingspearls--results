@@ -1681,9 +1681,11 @@ async function addBulkStudents(){
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Saving…';
   try{
     const batch=[];
+    const bulkDept=isSSSClass(cls)?(document.getElementById("bulk-dept")?.value||""):"";
     for(const s of parsed){
-      const bulkDept=document.getElementById("bulk-dept")?.value||"";
-      batch.push(db.collection("students").add({firstName:s.firstName,lastName:s.lastName,class:cls,department:bulkDept,createdAt:firebase.firestore.FieldValue.serverTimestamp()}));
+      const payload={firstName:s.firstName,lastName:s.lastName,class:cls,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+      if(bulkDept) payload.department=bulkDept;
+      batch.push(db.collection("students").add(payload));
     }
     await Promise.all(batch);
     document.getElementById("bulk-names").value="";
