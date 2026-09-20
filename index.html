@@ -1624,7 +1624,7 @@ async function confirmRename(){
       await Promise.all(list.map(s=>db.collection("students").doc(s.id).delete()));
       const batchAdds=lines.map(line=>{
         const parts=line.split(/\s+/);
-        const firstName=parts[0]||"", lastName=parts.slice(1).join(" ")||"";
+        const lastName=parts[0]||"", firstName=parts.slice(1).join(" ")||"";
         return db.collection("students").add({firstName,lastName,class:cls,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
       });
       await Promise.all(batchAdds);
@@ -1646,7 +1646,7 @@ async function confirmRename(){
     const updates=[];
     for(let i=0;i<n;i++){
       const parts=lines[i].split(/\s+/);
-      const firstName=parts[0]||"", lastName=parts.slice(1).join(" ")||"";
+      const lastName=parts[0]||"", firstName=parts.slice(1).join(" ")||"";
       updates.push(db.collection("students").doc(list[i].id).update({firstName,lastName}));
     }
     await Promise.all(updates);
@@ -1684,8 +1684,8 @@ async function addBulkStudents(){
   if(lines.length===0){alert("No names found.");return;}
   const parsed=lines.map(l=>{
     const parts=l.split(/\s+/);
-    if(parts.length<2) return{firstName:parts[0],lastName:""};
-    return{firstName:parts[0],lastName:parts.slice(1).join(" ")};
+    if(parts.length<2) return{firstName:"",lastName:parts[0]};
+    return{firstName:parts.slice(1).join(" "),lastName:parts[0]};
   });
   const preview=document.getElementById("bulk-preview");
   preview.textContent=`Ready to add ${parsed.length} student(s) to ${cls}`;
