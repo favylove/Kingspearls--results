@@ -939,6 +939,26 @@ function isSSSClass(cls){
   const c=cls.toLowerCase();
   return c.includes("sss");
 }
+function classSection(cls){
+  // "secondary" = Basic 7-9 + all SSS. "primary" = everything else (Busy Bee, Pre/Nursery, Basic 1-6).
+  if(!cls) return "";
+  if(isSSSClass(cls)) return "secondary";
+  const m=cls.toLowerCase().match(/basic\s*(\d+)/);
+  if(m) return parseInt(m[1],10)>=7?"secondary":"primary";
+  return "primary";
+}
+function isSuperAdmin(p){ return !!p && p.role==="superadmin"; }
+function isAnyAdmin(p){ return !!p && (p.role==="admin"||p.role==="superadmin"); }
+// Which classes the CURRENT user is allowed to see/touch anywhere in the app.
+// Section-scoped admins (role:"admin" with adminSection set) only get their
+// own section's classes; superadmins and legacy unscoped admins get everything.
+function allowedClassesForCurrentUser(){
+  const p=currentUserProfile;
+  if(p && p.role==="admin" && p.adminSection){
+    return CLASSES.filter(c=>classSection(c)===p.adminSection);
+  }
+  return CLASSES;
+}
 function isNurseryOrPrimary(cls){
   if(!cls) return false;
   const c=cls.toLowerCase();
@@ -1085,7 +1105,7 @@ async function onAuthChange(user){
     if(currentUserProfile.status==="rejected"){
       showToast("Your account access was revoked.","err"); await auth.signOut(); return;
     }
-    if(currentUserProfile.status==="pending" && currentUserProfile.role!=="admin"){
+    if(currentUserProfile.status==="pending" && !isAnyAdmin(currentUserProfile)){
       showPendingScreen(); return;
     }
     await showAppScreen();
@@ -1114,8 +1134,8 @@ async function showAppScreen(){
   document.getElementById("login-wrap").style.display="none";
   document.getElementById("pending-wrap").style.display="none";
   document.getElementById("app").style.display="block";
-  document.getElementById("nb-teachers").style.display = currentUserProfile.role==="admin" ? "inline-flex":"none";
-  document.getElementById("nb-report").style.display = (currentUserProfile.role==="admin" || currentUserProfile.formTeacherClass) ? "inline-flex":"none";
+  document.getElementById("nb-teachers").style.display = isSuperAdmin(currentUserProfile) ? "inline-flex":"none";
+  document.getElementById("nb-report").style.display = (isAnyAdmin(currentUserProfile) || currentUserProfile.formTeacherClass) ? "inline-flex":"none";
   populateSelects();
   await loadSettings();
   await loadStudents();
@@ -1145,7 +1165,8 @@ function switchTab(btn,paneId){
   document.getElementById(paneId).classList.add("active");
 }
 function populateSelects(){
-  const isFormTeacherOnly = currentUserProfile && currentUserProfile.role!=="admin" && currentUserProfile.formTeacherClass;
+  const isFormTeacherOnly = currentUserProfile && currentUserProfile.role!=="admin" && currentUserProfile.role!=="superadmin" && currentUserProfile.formTeacherClass;
+  const visibleClasses = allowedClassesForCurrentUser();
   ["r-class","ns-cls","bulk-cls","stu-fc","rc-cls","ps-class","att-class","reg-class","cum-class","rename-class"].forEach(id=>{
     const el=document.getElementById(id);
     const blank=["stu-fc","rc-cls"].includes(id)?'<option value="">All Classes</option>':
@@ -1158,14 +1179,14 @@ function populateSelects(){
     }
     el.disabled=false;
     el.innerHTML=blank;
-    CLASSES.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;el.appendChild(o);});
+    visibleClasses.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;el.appendChild(o);});
   });
   renderAssignClassChecks();
 }
 function renderAssignClassChecks(){
   const wrap=document.getElementById("assign-class-checks");
   if(!wrap) return;
-  wrap.innerHTML=CLASSES.map(c=>
+  wrap.innerHTML=allowedClassesForCurrentUser().map(c=>
     `<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;font-size:13.5px">
       <input type="checkbox" class="assign-cls-chk" value="${c}" onchange="renderSubjectCheckboxes()" style="width:15px;height:15px;cursor:pointer"/> ${c}
     </label>`).join("");
@@ -1261,7 +1282,12 @@ async function saveResultDoc(studentId,fields){
 async function loadStudents(){
   try{
     const snap=await db.collection("students").orderBy("lastName").get();
-    students=snap.docs.map(d=>({id:d.id,...d.data()}));
+    let all=snap.docs.map(d=>({id:d.id,...d.data()}));
+    const p=currentUserProfile;
+    if(p && p.role==="admin" && p.adminSection){
+      all=all.filter(s=>classSection(s.class)===p.adminSection);
+    }
+    students=all;
   }catch(e){ console.error(e); students=[]; }
 }
 function renderStudents(){
@@ -1747,7 +1773,7 @@ async function onClassChange(){
   const dept=document.getElementById("r-dept").value||"Sciences";
   let allSubs=getSubs(cls,dept);
   const notice=document.getElementById("r-subject-notice");
-  if(currentUserProfile?.role==="admin"){
+  if(isAnyAdmin(currentUserProfile)){
     notice.style.display="none";
     allSubs.forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;sub.appendChild(o);});
   }else{
@@ -1944,7 +1970,7 @@ async function saveAtt(){
 // ════════════════════════════════════════════
 function renderRcList(){
   let cls=document.getElementById("rc-cls").value;
-  if(currentUserProfile && currentUserProfile.role!=="admin" && currentUserProfile.formTeacherClass){
+  if(currentUserProfile && !isAnyAdmin(currentUserProfile) && currentUserProfile.formTeacherClass){
     cls=currentUserProfile.formTeacherClass; // form teachers can only ever browse their own class
   }
   const q=(document.getElementById("rc-q").value||"").toLowerCase();
@@ -2344,7 +2370,7 @@ async function downloadReportPDF(){
 //  TEACHERS (admin only)
 // ════════════════════════════════════════════
 async function loadTeachers(){
-  if(currentUserProfile?.role!=="admin") return;
+  if(!isSuperAdmin(currentUserProfile)) return;
   document.getElementById("teachers-loading").style.display="block";
   document.getElementById("teachers-list").innerHTML="";
   try{
@@ -2362,13 +2388,18 @@ async function loadTeachers(){
       const statusColor=d.status==="approved"?"#16A34A":d.status==="pending"?"#D97706":"#DC2626";
       const card=document.createElement("div");
       card.className="card";
+      const roleBadge = d.role==="superadmin"
+        ? '<span class="badge" style="background:#7C3AED;color:#fff">SUPER ADMIN</span>'
+        : d.role==="admin"
+          ? `<span class="badge" style="background:var(--gold);color:var(--navy)">ADMIN${d.adminSection?" · "+d.adminSection.toUpperCase():" · FULL ACCESS"}</span>`
+          : "";
       card.innerHTML=`
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <div>
-            <div style="font-weight:700;color:var(--navy)">${d.name||"(no name)"} ${d.role==="admin"?'<span class="badge" style="background:var(--gold);color:var(--navy)">ADMIN</span>':""}</div>
+            <div style="font-weight:700;color:var(--navy)">${d.name||"(no name)"} ${roleBadge}</div>
             <div style="font-size:12px;color:var(--slate)">${d.email||""}</div>
             <span class="badge" style="background:${statusColor}18;color:${statusColor};margin-top:6px;display:inline-block">${(d.status||"").toUpperCase()}</span>
-            ${d.status==="approved"&&d.role!=="admin"?`
+            ${d.status==="approved"&&d.role!=="admin"&&d.role!=="superadmin"?`
             <div style="margin-top:8px;display:flex;align-items:center;gap:6px">
               <label style="font-size:11px;color:var(--slate)">Form Teacher of:</label>
               <select style="font-size:12px;padding:4px 6px;border-radius:6px;border:1px solid var(--border)" onchange="setFormTeacherClass('${doc.id}',this.value)">
@@ -2376,19 +2407,32 @@ async function loadTeachers(){
                 ${CLASSES.map(c=>`<option value="${c}" ${d.formTeacherClass===c?"selected":""}>${c}</option>`).join("")}
               </select>
             </div>`:""}
+            ${d.role==="admin"?`
+            <div style="margin-top:8px;display:flex;align-items:center;gap:6px">
+              <label style="font-size:11px;color:var(--slate)">Access limited to:</label>
+              <select style="font-size:12px;padding:4px 6px;border-radius:6px;border:1px solid var(--border)" onchange="setAdminSection('${doc.id}',this.value)">
+                <option value="" ${!d.adminSection?"selected":""}>Full access (all classes)</option>
+                <option value="primary" ${d.adminSection==="primary"?"selected":""}>Primary only (Nursery – Basic 6)</option>
+                <option value="secondary" ${d.adminSection==="secondary"?"selected":""}>Secondary only (Basic 7–9, SSS)</option>
+              </select>
+            </div>`:""}
           </div>
           <div class="btn-row">
             ${d.status!=="approved"&&d.role!=="admin"?`<button class="btn btn-green btn-sm" onclick="setTeacherStatus('${doc.id}','approved')">✓ Approve</button>`:""}
             ${d.status!=="rejected"&&d.role!=="admin"?`<button class="btn btn-red btn-sm" onclick="setTeacherStatus('${doc.id}','rejected')">✕ Reject</button>`:""}
             ${d.status==="approved"&&d.role!=="admin"?`<button class="btn btn-ghost btn-sm" onclick="setTeacherStatus('${doc.id}','pending')">↺ Revoke</button>`:""}
-            ${d.status==="approved"&&d.role!=="admin"?`<button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}')">⭐ Make Admin</button>`:""}
+            ${d.status==="approved"&&d.role!=="admin"&&d.role!=="superadmin"?`
+              <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','primary')">⭐ Make Primary Admin</button>
+              <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','secondary')">⭐ Make Secondary Admin</button>
+              <button class="btn btn-ghost btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','')">⭐ Make Full Admin</button>
+            `:""}
             ${d.role==="admin"&&doc.id!==currentUserProfile?.uid?`<button class="btn btn-ghost btn-sm" onclick="setTeacherAdmin('${doc.id}',false,'${(d.name||d.email||"").replace(/'/g,"\\'")}')">Remove Admin</button>`:""}
           </div>
         </div>`;
       wrap.appendChild(card);
 
       // add to dropdown (non-admin approved teachers)
-      if(d.role!=="admin"&&d.status==="approved"){
+      if(d.role!=="admin"&&d.role!=="superadmin"&&d.status==="approved"){
         const o=document.createElement("option");
         o.value=doc.id; o.textContent=d.name||d.email; sel.appendChild(o);
       }
@@ -2484,7 +2528,7 @@ async function saveAssignment(){
 
 // ── FILTER SUBJECTS FOR TEACHER ─────────────────────────────────────────────
 async function getAssignedSubjects(cls){
-  if(currentUserProfile?.role==="admin") return null; // admin sees all
+  if(isAnyAdmin(currentUserProfile)) return null; // admins see all subjects for classes they can access
   try{
     const snap=await db.collection("assignments")
       .where("teacherId","==",currentUserProfile.uid)
@@ -2497,16 +2541,27 @@ async function setTeacherStatus(uid,status){
   try{ await db.collection("users").doc(uid).update({status}); showToast("✓ Updated!"); loadTeachers(); }
   catch(e){ showToast("Error updating account","err"); }
 }
-async function setTeacherAdmin(uid,makeAdmin,name){
+async function setTeacherAdmin(uid,makeAdmin,name,section){
+  const sectionLabel=section==="primary"?"PRIMARY ONLY (Nursery–Basic 6)":section==="secondary"?"SECONDARY ONLY (Basic 7–9, SSS)":"FULL ACCESS (all classes)";
   const msg=makeAdmin
-    ? `Make ${name} an ADMIN? They will be able to approve teachers, manage all students, and edit results for every class.`
+    ? `Make ${name} an ADMIN with ${sectionLabel}? ${section?"They will not be able to see or edit students, results, or report cards for classes outside this section.":"They will be able to manage students and results for every class."}`
     : `Remove admin access from ${name}? They will become a regular teacher again.`;
   if(!confirm(msg)) return;
   try{
-    await db.collection("users").doc(uid).update({role:makeAdmin?"admin":"teacher"});
+    const update={role:makeAdmin?"admin":"teacher"};
+    if(makeAdmin){ update.adminSection=section||firebase.firestore.FieldValue.delete(); }
+    else{ update.adminSection=firebase.firestore.FieldValue.delete(); }
+    await db.collection("users").doc(uid).update(update);
     showToast(makeAdmin?"✓ Now an admin!":"✓ Admin access removed");
     loadTeachers();
   }catch(e){ showToast("Error updating role","err"); console.error(e); }
+}
+async function setAdminSection(uid,section){
+  try{
+    await db.collection("users").doc(uid).update({adminSection:section||firebase.firestore.FieldValue.delete()});
+    showToast("✓ Access scope updated");
+    loadTeachers();
+  }catch(e){ showToast("Error updating access","err"); console.error(e); }
 }
 
 // ════════════════════════════════════════════
