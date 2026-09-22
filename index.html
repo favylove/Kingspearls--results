@@ -2569,6 +2569,13 @@ async function setAdminSection(uid,section){
     loadTeachers();
   }catch(e){ showToast("Error updating access","err"); console.error(e); }
 }
+async function setFormTeacherClass(uid,cls){
+  try{
+    await db.collection("users").doc(uid).update({formTeacherClass:cls||firebase.firestore.FieldValue.delete()});
+    showToast(cls?`✓ Set as form teacher of ${cls}!`:"✓ Form teacher assignment cleared");
+    loadTeachers();
+  }catch(e){ showToast("Error updating form teacher","err"); console.error(e); }
+}
 
 // ════════════════════════════════════════════
 //  CLASS REGISTER
