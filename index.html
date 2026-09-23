@@ -2011,9 +2011,9 @@ async function viewReport(stuId){
   const subs=getSubs(stu.class,dept);
   const rows=subs.map(sub=>{
     const sc=data.subjects[sub]||{};
-    const ca=Number(sc.ca||0),exam=Number(sc.exam||0),tot=ca+exam;
-    return{subject:sub,ca,exam,tot,comment:sc.comment||""};
-  }).filter(r=>r.ca+r.exam>0);
+    const ca1=Number(sc.ca1||0),ca2=Number(sc.ca2||0),ca=Number(sc.ca||(ca1+ca2)),exam=Number(sc.exam||0),tot=ca1+ca2+exam;
+    return{subject:sub,ca1,ca2,ca,exam,tot,comment:sc.comment||""};
+  }).filter(r=>r.ca1+r.ca2+r.exam>0);
   const totalScore=rows.reduce((a,r)=>a+r.tot,0);
   const avg=rows.length?(totalScore/rows.length).toFixed(1):0;
   currentReportAvg=Number(avg);
@@ -2075,13 +2075,14 @@ async function viewReport(stuId){
 
   const termCell=v=>`<td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:10.5px;border:1.5px solid var(--navy)">${v==null?"–":v}</td>`;
   let scoresHtml=rows.length===0
-    ?`<tr><td colspan="9" style="text-align:center;padding:36px;color:var(--slate)">No results recorded for ${currentTerm}.</td></tr>`
+    ?`<tr><td colspan="10" style="text-align:center;padding:36px;color:var(--slate)">No results recorded for ${currentTerm}.</td></tr>`
     :rows.map((r,i)=>{
       const gi=gradeInfo(r.tot);
       const tt=termTotals[r.subject]||{};
       return`<tr style="background:#fff">
         <td style="padding:4px 8px;font-weight:800;font-size:11.5px;border:1.5px solid var(--navy)">${r.subject}</td>
-        <td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:11px;border:1.5px solid var(--navy)">${r.ca||"–"}</td>
+        <td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:11px;border:1.5px solid var(--navy)">${r.ca1||"–"}</td>
+        <td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:11px;border:1.5px solid var(--navy)">${r.ca2||"–"}</td>
         <td style="padding:4px 6px;color:var(--slate);text-align:center;font-size:11px;border:1.5px solid var(--navy)">${r.exam||"–"}</td>
         <td style="padding:4px 6px;font-weight:800;text-align:center;font-size:11px;border:1.5px solid var(--navy)">${r.tot}</td>
         <td style="padding:4px 6px;text-align:center;border:1.5px solid var(--navy)"><span class="badge" style="background:${gi.color}18;color:${gi.color};font-size:10px;padding:2px 6px">${gi.grade}</span></td>
@@ -2134,7 +2135,8 @@ async function viewReport(stuId){
       <div class="tbl-wrap"><table style="width:100%;border-collapse:collapse;font-size:15px;border:1.5px solid var(--navy)">
         <thead><tr style="background:#DB2777">
           <th style="padding:5px 8px;text-align:left;font-size:13px;color:#fff;border:1.5px solid var(--navy)">Subject</th>
-          <th style="padding:5px 8px;text-align:center;font-size:13px;color:#fff;border:1.5px solid var(--navy)">CA(40)</th>
+          <th style="padding:5px 8px;text-align:center;font-size:13px;color:#fff;border:1.5px solid var(--navy)">CA1(20)</th>
+          <th style="padding:5px 8px;text-align:center;font-size:13px;color:#fff;border:1.5px solid var(--navy)">CA2(20)</th>
           <th style="padding:5px 8px;text-align:center;font-size:13px;color:#fff;border:1.5px solid var(--navy)">Exam(60)</th>
           <th style="padding:5px 8px;text-align:center;font-size:13px;color:#fff;border:1.5px solid var(--navy)">Total</th>
           <th style="padding:5px 8px;text-align:center;font-size:13px;color:#fff;border:1.5px solid var(--navy)">Grade</th>
