@@ -322,6 +322,7 @@ tr:nth-child(even) td{background:#F8FAFF;}
       <div class="fg"><label class="lbl">Resumption Date</label>
         <input type="date" id="d-resumption" onchange="setResumptionDate(this.value)"/></div>
     </div>
+    <div id="score-lock-wrap" style="display:none"></div>
   </div>
   <div class="card">
     <div class="card-title">Quick Actions</div>
@@ -1202,6 +1203,7 @@ function getSelectedAssignClasses(){
 //  SETTINGS (shared term/session)
 // ════════════════════════════════════════════
 let currentClosingDate="", currentResumptionDate="";
+let scoreLock={ca1:true,ca2:true,exam:true}; // true = UNLOCKED / editable
 async function loadSettings(){
   try{
     const snap=await db.collection("settings").doc("global").get();
@@ -1209,6 +1211,7 @@ async function loadSettings(){
       const d=snap.data();
       currentTerm=d.term||currentTerm; currentSession=d.session||currentSession;
       currentClosingDate=d.closingDate||""; currentResumptionDate=d.resumptionDate||"";
+      if(d.scoreLock) scoreLock={ca1:true,ca2:true,exam:true,...d.scoreLock};
     }else{
       await db.collection("settings").doc("global").set({term:currentTerm,session:currentSession});
     }
@@ -1216,6 +1219,7 @@ async function loadSettings(){
     document.getElementById("d-session").value=currentSession;
     document.getElementById("d-closing").value=currentClosingDate;
     document.getElementById("d-resumption").value=currentResumptionDate;
+    renderScoreLockToggles();
   }catch(e){ console.error(e); }
 }
 async function setSession(v){
@@ -1233,6 +1237,32 @@ async function setClosingDate(v){
 async function setResumptionDate(v){
   currentResumptionDate=v;
   try{ await db.collection("settings").doc("global").set({resumptionDate:v},{merge:true}); }catch(e){}
+}
+// ── SCORE ENTRY LOCK (Super Admin only) ──────────────────────────────────────
+async function setScoreLock(field,unlocked){
+  scoreLock[field]=unlocked;
+  try{
+    await db.collection("settings").doc("global").set({scoreLock},{merge:true});
+    showToast(`✓ ${field.toUpperCase()} entry ${unlocked?"unlocked":"locked"} for everyone`);
+    onSubjectChange(); // refresh disabled state on any currently-open score table
+  }catch(e){ showToast("Error updating lock","err"); console.error(e); }
+}
+function renderScoreLockToggles(){
+  const wrap=document.getElementById("score-lock-wrap");
+  if(!wrap) return;
+  if(!isSuperAdmin(currentUserProfile)){ wrap.style.display="none"; return; }
+  wrap.style.display="block";
+  const mk=(field,label)=>`
+    <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--light);border-radius:8px;margin-bottom:6px;cursor:pointer">
+      <span style="font-size:13px;font-weight:600;color:var(--navy)">${label}</span>
+      <input type="checkbox" ${scoreLock[field]?"checked":""} onchange="setScoreLock('${field}',this.checked)" style="width:18px;height:18px;cursor:pointer"/>
+    </label>`;
+  wrap.innerHTML=`
+    <div class="card-title" style="margin-top:14px">🔒 Score Entry Lock <span style="font-weight:400;font-size:11px;color:var(--slate)">(Super Admin only — controls what ALL teachers can edit)</span></div>
+    <p style="color:var(--slate);font-size:12.5px;margin-bottom:10px">Untick a box to prevent every teacher from changing that score field anywhere in the app. You (Super Admin) can always edit all three regardless of these switches.</p>
+    ${mk("ca1","Allow CA1 entry")}
+    ${mk("ca2","Allow CA2 entry")}
+    ${mk("exam","Allow Exam entry")}`;
 }
 function fmtDate(v){
   if(!v) return "_________________";
@@ -1811,13 +1841,15 @@ async function onSubjectChange(){
     const sc=data.subjects[sub]||{ca1:"",ca2:"",exam:"",comment:""};
     const ca1=Number(sc.ca1||0),ca2=Number(sc.ca2||0),exam=Number(sc.exam||0),tot=ca1+ca2+exam;
     const gi=tot>0?gradeInfo(tot):null;
+    const bypass=isSuperAdmin(currentUserProfile); // super admin can always edit, regardless of lock
+    const lockCa1=!bypass && !scoreLock.ca1, lockCa2=!bypass && !scoreLock.ca2, lockExam=!bypass && !scoreLock.exam;
     const tr=document.createElement("tr");
     tr.innerHTML=`<td style="color:var(--slate)">${i+1}</td>
       <td style="font-family:monospace;color:var(--royal);font-weight:600;font-size:11px">${s.id.slice(0,8)}</td>
       <td style="font-weight:600">${s.lastName} ${s.firstName}</td>
-      <td><input class="score-inp" type="number" min="0" max="20" value="${sc.ca1||""}" placeholder="0" data-id="${s.id}" data-t="ca1" oninput="liveRow(this)"/></td>
-      <td><input class="score-inp" type="number" min="0" max="20" value="${sc.ca2||""}" placeholder="0" data-id="${s.id}" data-t="ca2" oninput="liveRow(this)"/></td>
-      <td><input class="score-inp" type="number" min="0" max="60" value="${sc.exam||""}" placeholder="0" data-id="${s.id}" data-t="exam" oninput="liveRow(this)"/></td>
+      <td><input class="score-inp" type="number" min="0" max="20" value="${sc.ca1||""}" placeholder="0" data-id="${s.id}" data-t="ca1" oninput="liveRow(this)" ${lockCa1?'disabled title="CA1 entry is currently locked by Super Admin"':""}/></td>
+      <td><input class="score-inp" type="number" min="0" max="20" value="${sc.ca2||""}" placeholder="0" data-id="${s.id}" data-t="ca2" oninput="liveRow(this)" ${lockCa2?'disabled title="CA2 entry is currently locked by Super Admin"':""}/></td>
+      <td><input class="score-inp" type="number" min="0" max="60" value="${sc.exam||""}" placeholder="0" data-id="${s.id}" data-t="exam" oninput="liveRow(this)" ${lockExam?'disabled title="Exam entry is currently locked by Super Admin"':""}/></td>
       <td id="tot-${s.id}" style="font-weight:700;color:${gi?gi.color:"var(--slate)"}">${tot>0?tot:"–"}</td>
       <td id="grd-${s.id}">${gi?`<span class="badge" style="background:${gi.color}18;color:${gi.color}">${gi.grade}</span>`:""}</td>
       <td><input class="comment-inp" type="text" value="${sc.comment||""}" placeholder="comment…" data-id="${s.id}" data-t="comment"/></td>`;
@@ -2474,6 +2506,11 @@ async function loadTeacherAssignment(){
   }catch(e){}
 }
 
+// Deterministic assignment doc ID (teacherId + class) so Firestore SECURITY
+// RULES can look up "is this teacher assigned to this class" directly by path
+// — rules cannot run .where() queries, only get() by exact document ID.
+function assignmentDocId(teacherId,cls){ return teacherId+"__"+cls; }
+
 function renderSubjectCheckboxes(){
   const classes=getSelectedAssignClasses();
   const tid=document.getElementById("assign-teacher").value;
@@ -2491,9 +2528,9 @@ function renderSubjectCheckboxes(){
   const wrap=document.getElementById("subject-checkboxes");
   wrap.innerHTML="";
   // Show as pre-checked only if EVERY selected class already has that subject assigned to this teacher
-  Promise.all(classes.map(c=>db.collection("assignments").where("teacherId","==",tid).where("class","==",c).get()))
+  Promise.all(classes.map(c=>db.collection("assignments").doc(assignmentDocId(tid,c)).get()))
     .then(snaps=>{
-      const perClassSubs=snaps.map(snap=>snap.empty?[]:(snap.docs[0]?.data()?.subjects||[]));
+      const perClassSubs=snaps.map(snap=>snap.exists?(snap.data()?.subjects||[]):[]);
       subs.forEach(sub=>{
         const id="chk_"+sub.replace(/\s+/g,"_");
         const allHaveIt=perClassSubs.every(list=>list.includes(sub));
@@ -2520,15 +2557,12 @@ async function saveAssignment(){
   const checked=[...document.querySelectorAll("#subject-checkboxes input:checked")].map(c=>c.value);
   const tname=document.getElementById("assign-teacher").selectedOptions[0]?.text||"";
   try{
-    // upsert the SAME subject list into every ticked class in one go
-    await Promise.all(classes.map(async cls=>{
-      const snap=await db.collection("assignments").where("teacherId","==",tid).where("class","==",cls).get();
-      if(snap.empty){
-        await db.collection("assignments").add({teacherId:tid,teacherName:tname,class:cls,subjects:checked});
-      }else{
-        await snap.docs[0].ref.update({subjects:checked,teacherName:tname});
-      }
-    }));
+    // upsert the SAME subject list into every ticked class in one go, at a
+    // deterministic doc ID (see assignmentDocId) so rules can verify it
+    await Promise.all(classes.map(cls=>
+      db.collection("assignments").doc(assignmentDocId(tid,cls))
+        .set({teacherId:tid,teacherName:tname,class:cls,subjects:checked},{merge:true})
+    ));
     showToast(`✓ Subjects assigned to ${classes.length} class(es)!`);
     loadTeacherAssignment();
   }catch(e){showToast("Error saving assignment","err");console.error(e);}
@@ -2538,11 +2572,9 @@ async function saveAssignment(){
 async function getAssignedSubjects(cls){
   if(isSuperAdmin(currentUserProfile)) return null; // only super admins see/edit every subject with no assignment needed
   try{
-    const snap=await db.collection("assignments")
-      .where("teacherId","==",currentUserProfile.uid)
-      .where("class","==",cls).get();
-    if(snap.empty) return []; // no assignment = no subjects
-    return snap.docs[0].data().subjects||[];
+    const snap=await db.collection("assignments").doc(assignmentDocId(currentUserProfile.uid,cls)).get();
+    if(!snap.exists) return []; // no assignment = no subjects
+    return snap.data().subjects||[];
   }catch(e){return null;}
 }
 async function setTeacherStatus(uid,status){
@@ -2598,11 +2630,11 @@ async function loadClassRegister(){
   try{
     const snap=await db.collection("registers").doc(regId).get();
     registerRows=snap.exists?(snap.data().students||[]):[];
-    // If empty, pre-fill from students collection for this class
+    // If empty, pre-fill from the already-loaded student list for this class
+    // (avoids a Firestore compound where+orderBy query, which needs a manually
+    // created composite index and otherwise fails silently into the catch below)
     if(registerRows.length===0){
-      const stuSnap=await db.collection("students").where("class","==",cls).orderBy("lastName").get();
-      stuSnap.forEach(d=>{
-        const s=d.data();
+      students.filter(s=>s.class===cls).forEach(s=>{
         registerRows.push({name:`${s.lastName} ${s.firstName}`,gender:"",dob:"",admNo:""});
       });
     }
