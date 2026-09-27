@@ -560,7 +560,9 @@ tr:nth-child(even) td{background:#F8FAFF;}
           <option value="F">Female</option>
         </select>
       </div>
-      <div class="fg"><label class="lbl">Age</label><input type="number" id="edit-stu-age" min="1" max="25" placeholder="e.g. 13"/></div>
+      <div class="fg"><label class="lbl">Date of Birth</label><input type="date" id="edit-stu-dob" oninput="document.getElementById('edit-stu-age-preview').textContent=calcAgeFromDob(this.value)!==null?('Age: '+calcAgeFromDob(this.value)):''"/>
+        <div id="edit-stu-age-preview" style="font-size:12px;color:var(--slate);margin-top:4px"></div>
+      </div>
     </div>
     <div class="btn-row">
       <button class="btn btn-gold" onclick="saveEditStudent()">💾 Save Changes</button>
@@ -625,7 +627,9 @@ tr:nth-child(even) td{background:#F8FAFF;}
             <option value="F">Female</option>
           </select>
         </div>
-        <div class="fg"><label class="lbl">Age</label><input type="number" id="ns-age" min="1" max="25" placeholder="e.g. 13"/></div>
+        <div class="fg"><label class="lbl">Date of Birth</label><input type="date" id="ns-dob" oninput="document.getElementById('ns-age-preview').textContent=calcAgeFromDob(this.value)!==null?('Age: '+calcAgeFromDob(this.value)):''"/>
+          <div id="ns-age-preview" style="font-size:12px;color:var(--slate);margin-top:4px"></div>
+        </div>
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="add-stu-btn" onclick="addStudent()">Save Student</button>
@@ -1264,6 +1268,16 @@ function renderScoreLockToggles(){
     ${mk("ca2","Allow CA2 entry")}
     ${mk("exam","Allow Exam entry")}`;
 }
+function calcAgeFromDob(dobStr){
+  if(!dobStr) return null;
+  const dob=new Date(dobStr+"T00:00:00");
+  if(isNaN(dob)) return null;
+  const today=new Date();
+  let age=today.getFullYear()-dob.getFullYear();
+  const m=today.getMonth()-dob.getMonth();
+  if(m<0 || (m===0 && today.getDate()<dob.getDate())) age--;
+  return age>=0 && age<25 ? age : null; // sanity bound for a school setting
+}
 function fmtDate(v){
   if(!v) return "_________________";
   const d=new Date(v+"T00:00:00");
@@ -1401,7 +1415,9 @@ function openEditStudent(stuId){
   clsSel.innerHTML=CLASSES.map(c=>`<option value="${c}" ${c===s.class?"selected":""}>${c}</option>`).join("");
   document.getElementById("edit-stu-dept").value=s.department||"";
   document.getElementById("edit-stu-gender").value=s.gender||"";
-  document.getElementById("edit-stu-age").value=s.age||"";
+  document.getElementById("edit-stu-dob").value=s.dob||"";
+  const agePrev=calcAgeFromDob(s.dob||"");
+  document.getElementById("edit-stu-age-preview").textContent=agePrev!==null?("Age: "+agePrev):"";
   document.getElementById("edit-student-form").style.display="block";
   document.getElementById("edit-student-form").scrollIntoView({behavior:"smooth",block:"center"});
 }
@@ -1416,7 +1432,8 @@ async function saveEditStudent(){
   const cls=document.getElementById("edit-stu-class").value;
   const dept=document.getElementById("edit-stu-dept").value;
   const gender=document.getElementById("edit-stu-gender").value;
-  const age=document.getElementById("edit-stu-age").value;
+  const dob=document.getElementById("edit-stu-dob").value;
+  const age=calcAgeFromDob(dob);
   if(!fn||!ln||!cls){showToast("Please fill in name and class","err");return;}
   try{
     const update={firstName:fn,lastName:ln,class:cls};
@@ -1424,7 +1441,9 @@ async function saveEditStudent(){
     else update.department=firebase.firestore.FieldValue.delete();
     if(gender) update.gender=gender;
     else update.gender=firebase.firestore.FieldValue.delete();
-    if(age) update.age=Number(age);
+    if(dob) update.dob=dob;
+    else update.dob=firebase.firestore.FieldValue.delete();
+    if(age!==null) update.age=age;
     else update.age=firebase.firestore.FieldValue.delete();
     await db.collection("students").doc(editStudentId).update(update);
     showToast("✓ Student updated!");
@@ -1773,16 +1792,18 @@ async function addStudent(){
   if(!fn||!ln){ alert("Enter first and last name."); return; }
   const dept=document.getElementById("ns-dept")?.value||"";
   const gender=document.getElementById("ns-gender")?.value||"";
-  const age=document.getElementById("ns-age")?.value||"";
+  const dob=document.getElementById("ns-dob")?.value||"";
+  const age=calcAgeFromDob(dob);
   const btn=document.getElementById("add-stu-btn");
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   try{
     const payload={firstName:fn,lastName:ln,class:cl,department:dept,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
     if(gender) payload.gender=gender;
-    if(age) payload.age=Number(age);
+    if(dob) payload.dob=dob;
+    if(age!==null) payload.age=age;
     await db.collection("students").add(payload);
     document.getElementById("ns-fn").value=""; document.getElementById("ns-ln").value="";
-    document.getElementById("ns-gender").value=""; document.getElementById("ns-age").value="";
+    document.getElementById("ns-gender").value=""; document.getElementById("ns-dob").value="";
     toggleAddForm(); await loadStudents(); renderStudents(); updateDashboard();
     showToast("✓ Student added!");
   }catch(e){ showToast("Error adding student","err"); }
@@ -2635,7 +2656,7 @@ async function loadClassRegister(){
     // created composite index and otherwise fails silently into the catch below)
     if(registerRows.length===0){
       students.filter(s=>s.class===cls).forEach(s=>{
-        registerRows.push({name:`${s.lastName} ${s.firstName}`,gender:"",dob:"",admNo:""});
+        registerRows.push({studentId:s.id,name:`${s.lastName} ${s.firstName}`,gender:"",dob:"",admNo:""});
       });
     }
     document.getElementById("reg-loading").style.display="none";
@@ -2697,7 +2718,22 @@ async function saveRegister(){
       updatedBy:currentUserProfile?.name||""
     });
     showToast("✓ Register saved!");
-  }catch(e){showToast("Error saving register","err");console.error(e);}
+  }catch(e){showToast("Error saving register","err");console.error(e);return;}
+  // Best-effort: also copy each student's Gender onto their actual profile so
+  // it shows on the report card automatically. Only admins are allowed to edit
+  // student profiles, so this quietly does nothing extra for regular teachers
+  // (their register still saves fine either way) rather than showing an error
+  // for something they were never trying to do.
+  try{
+    const syncs=[];
+    registerRows.filter(r=>r.studentId).forEach(r=>{
+      const update={};
+      if(r.gender) update.gender=r.gender;
+      if(r.dob){ update.dob=r.dob; const age=calcAgeFromDob(r.dob); if(age!==null) update.age=age; }
+      if(Object.keys(update).length) syncs.push(db.collection("students").doc(r.studentId).update(update));
+    });
+    if(syncs.length){ await Promise.all(syncs); await loadStudents(); }
+  }catch(e){ console.error("register sync skipped:",e); }
 }
 
 // ════════════════════════════════════════════
