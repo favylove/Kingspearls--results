@@ -568,6 +568,7 @@ tr:nth-child(even) td{background:#F8FAFF;}
     <div class="btn-row">
       <button class="btn btn-gold" onclick="saveEditStudent()">💾 Save Changes</button>
       <button class="btn btn-ghost" onclick="closeEditStudent()">Cancel</button>
+      <button class="btn" style="background:#DC2626;color:#fff" onclick="deleteStudent()">🗑 Delete Student</button>
     </div>
   </div>
   <div id="promote-form" class="card" style="display:none;border:2px solid var(--purple);margin-bottom:14px">
@@ -1463,6 +1464,24 @@ async function saveEditStudent(){
     closeEditStudent();
     await loadStudents();renderStudents();
   }catch(e){showToast("Error saving changes","err");console.error(e);}
+}
+
+async function deleteStudent(){
+  if(!editStudentId) return;
+  const s=students.find(x=>x.id===editStudentId); if(!s) return;
+  const name=`${s.lastName||""} ${s.firstName||""}`.trim();
+  if(!confirm(`Permanently DELETE ${name} (${s.class}) from the school list?\n\nTheir saved scores will also be removed. This cannot be undone.`)) return;
+  try{
+    await db.collection("students").doc(editStudentId).delete();
+    // best-effort: also remove this student's saved results
+    try{
+      const rs=await db.collection("results").where("studentId","==",editStudentId).get();
+      await Promise.all(rs.docs.map(d=>d.ref.delete()));
+    }catch(_){}
+    showToast(`✓ ${name} deleted`);
+    closeEditStudent();
+    await loadStudents();renderStudents();
+  }catch(e){showToast("Error deleting student","err");console.error(e);}
 }
 
 // ── PROMOTE STUDENTS ────────────────────────────────────────────────────────
