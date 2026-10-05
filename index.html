@@ -913,14 +913,15 @@ const CLASSES=["Busy Bee",
   "Basic 1 Gold","Basic 1 Diamond","Basic 1 Pearl",
   "Basic 2 Gold","Basic 2 Diamond","Basic 2 Pearl",
   "Basic 3 Gold","Basic 3 Diamond","Basic 3 Pearl",
-  "Basic 4 Gold","Basic 4 Diamond","Basic 4 Pearl",
-  "Basic 5 Gold","Basic 5 Diamond","Basic 5 Pearl",
-  "Basic 6 Gold","Basic 6 Diamond","Basic 6 Pearl",
+  "Basic 4 Gold","Basic 4 Diamond",
+  "Basic 5 Gold","Basic 5 Diamond",
+  "Basic 6 Gold",
   "Basic 7A","Basic 7B","Basic 8A","Basic 8B","Basic 9A","Basic 9B",
   "SSS 1A","SSS 1B","SSS 2A","SSS 2B","SSS 3A","SSS 3B"];
 const SUBJECTS={
   nursery:["Number Work","Letter Work","Verbal Reasoning","Basic Science","Social Habits","Arts & Craft","Physical Education"],
-  primary:["Mathematics","English Language","Basic Science","Social Studies","Civic Education","CRS/IRS","Fine Arts","PHE","Verbal Aptitude","Quantitative Reasoning"],
+  lowerPrimary:["Mathematics","English Language","Social Studies","Basic Science","Creative Arts","Calligraphy","Etiquette","Diction","Phonics","Basic Digital Literacy","Civic Education","Vocational Aptitude","Quantitative Reasoning","Verbal Reasoning","Christian Religious Studies","Physical and Health Education","Spellings","Literature"],
+  upperPrimary:["Mathematics","English Language","Basic Science","Home Economics","Basic Digital Technology","French","Creative Arts","Quantitative Reasoning","Verbal Reasoning","Creative Writing","Social Studies","Physical and Health Education","Christian Religious Study","Agricultural Science","Diction","Literature","Vocational Aptitude","Spellings","Civic Education"],
   basic:["Mathematics","English Studies","Literature in English","Christian Religious Studies","Business Studies","Intermediate Science","Physical Health Education","Social and Citizenship Studies","Computer Hardware & GSM Repairs","Fashion Design & Garment Making","Cultural and Creative Arts","Digital Technologies","French Language","Igbo Language","Nigerian History","Home Economics","Agricultural Science","Basic Technology","Basic Science"],
   sciences:["English Language","Mathematics","Citizenship & Heritage Studies","Digital Technologies","Computer Hardware & GSM Repairs","Fashion Design & Garment Making","Physics","Biology","Chemistry","Further Mathematics","Geography","Agricultural Science","Technical Drawing","Health Education"],
   humanities:["English Language","Mathematics","Citizenship & Heritage Studies","Digital Technologies","Computer Hardware & GSM Repairs","Fashion Design & Garment Making","Literature in English","Government","Christian Religious Knowledge","Nigerian History","Igbo Language"],
@@ -936,7 +937,8 @@ function getSubs(cls, dept){
   const basicNum=c.match(/basic\s*(\d+)/);
   if(basicNum){
     const n=parseInt(basicNum[1],10);
-    if(n>=1&&n<=6) return SUBJECTS.primary;
+    if(n>=1&&n<=3) return SUBJECTS.lowerPrimary;
+    if(n>=4&&n<=6) return SUBJECTS.upperPrimary;
     if(n>=7&&n<=9) return SUBJECTS.basic;
   }
   // SSS — use department
