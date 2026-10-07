@@ -920,8 +920,8 @@ const CLASSES=["Busy Bee",
   "SSS 1A","SSS 1B","SSS 2A","SSS 2B","SSS 3A","SSS 3B"];
 const SUBJECTS={
   nursery:["Number Work","Letter Work","Verbal Reasoning","Basic Science","Social Habits","Arts & Craft","Physical Education"],
-  lowerPrimary:["Mathematics","English Language","Social Studies","Basic Science","Creative Arts","Calligraphy","Etiquette","Diction","Phonics","Basic Digital Literacy","Civic Education","Vocational Aptitude","Quantitative Reasoning","Verbal Reasoning","Christian Religious Studies","Physical and Health Education","Spellings","Literature"],
-  upperPrimary:["Mathematics","English Language","Basic Science","Home Economics","Basic Digital Technology","French","Creative Arts","Quantitative Reasoning","Verbal Reasoning","Creative Writing","Social Studies","Physical and Health Education","Christian Religious Study","Agricultural Science","Diction","Literature","Vocational Aptitude","Spellings","Civic Education"],
+  lowerPrimary:["Mathematics","English Language","Basic Science","Basic Digital Literacy","Creative Arts","Quantitative Reasoning","Verbal Reasoning","Social Studies","Physical and Health Education","Christian Religious Studies","Diction","Literature","Vocational Aptitude","Spellings","Civic Education","Calligraphy","Etiquette","Phonics"],
+  upperPrimary:["Mathematics","English Language","Basic Science","Basic Digital Technology","Creative Arts","Quantitative Reasoning","Verbal Reasoning","Social Studies","Physical and Health Education","Christian Religious Study","Diction","Literature","Vocational Aptitude","Spellings","Civic Education","Home Economics","French","Creative Writing","Agricultural Science"],
   basic:["Mathematics","English Studies","Literature in English","Christian Religious Studies","Business Studies","Intermediate Science","Physical Health Education","Social and Citizenship Studies","Computer Hardware & GSM Repairs","Fashion Design & Garment Making","Cultural and Creative Arts","Digital Technologies","French Language","Igbo Language","Nigerian History","Home Economics","Agricultural Science","Basic Technology","Basic Science"],
   sciences:["English Language","Mathematics","Citizenship & Heritage Studies","Digital Technologies","Computer Hardware & GSM Repairs","Fashion Design & Garment Making","Physics","Biology","Chemistry","Further Mathematics","Geography","Agricultural Science","Technical Drawing","Health Education"],
   humanities:["English Language","Mathematics","Citizenship & Heritage Studies","Digital Technologies","Computer Hardware & GSM Repairs","Fashion Design & Garment Making","Literature in English","Government","Christian Religious Knowledge","Nigerian History","Igbo Language"],
@@ -963,6 +963,11 @@ function classSection(cls){
   if(m) return parseInt(m[1],10)>=7?"secondary":"primary";
   return "primary";
 }
+function sectionAllows(adminSection,cls){
+  const sec=classSection(cls);
+  if(adminSection==="nursery_primary") return sec==="nursery"||sec==="primary";
+  return sec===adminSection;
+}
 function isSuperAdmin(p){ return !!p && p.role==="admin" && p.isSuperAdmin===true; }
 function isAnyAdmin(p){ return !!p && p.role==="admin"; }
 // Which classes the CURRENT user is allowed to see/touch anywhere in the app.
@@ -971,7 +976,7 @@ function isAnyAdmin(p){ return !!p && p.role==="admin"; }
 function allowedClassesForCurrentUser(){
   const p=currentUserProfile;
   if(p && p.role==="admin" && !p.isSuperAdmin && p.adminSection){
-    return CLASSES.filter(c=>classSection(c)===p.adminSection);
+    return CLASSES.filter(c=>sectionAllows(p.adminSection,c));
   }
   return CLASSES;
 }
@@ -1348,7 +1353,7 @@ async function loadStudents(){
     let all=snap.docs.map(d=>({id:d.id,...d.data()}));
     const p=currentUserProfile;
     if(p && p.role==="admin" && !p.isSuperAdmin && p.adminSection){
-      all=all.filter(s=>classSection(s.class)===p.adminSection);
+      all=all.filter(s=>sectionAllows(p.adminSection,s.class));
     }
     students=all;
   }catch(e){ console.error(e); students=[]; }
@@ -2000,14 +2005,30 @@ function setRating(stuId,domain,trait,n,el){
 async function savePsycho(){
   const cls=document.getElementById("ps-class").value; if(!cls) return;
   const list=studentsInClass(cls);
-  try{
-    await Promise.all(list.map(s=>{
-      const data=resultsCache[resultDocId(s.id)]; if(!data) return null;
-      return saveResultDoc(s.id,{psycho:data.psycho,class:cls,term:currentTerm,session:currentSession,studentId:s.id});
-    }));
-    showToast("✓ Ratings saved!");
+  if(!list.length){ showToast("No students in this class","err"); return; }
+  const btn=document.querySelector("#psycho-wrap .btn-gold");
+  if(btn){ btn.disabled=true; }
+  // Save each student on their own so ONE problem record can't block the whole class
+  const results=await Promise.allSettled(list.map(async s=>{
+    const data=resultsCache[resultDocId(s.id)]||emptyResultData(s.id,cls);
+    // Firestore rejects "undefined" values — strip them out
+    const psycho=JSON.parse(JSON.stringify(data.psycho||{}));
+    await saveResultDoc(s.id,{psycho,class:cls,term:currentTerm,session:currentSession,studentId:s.id});
+  }));
+  if(btn){ btn.disabled=false; }
+  const failed=[];
+  results.forEach((r,i)=>{ if(r.status==="rejected"){ failed.push({stu:list[i],err:r.reason}); console.error("Domain save failed for",list[i].id,r.reason); } });
+  if(!failed.length){ showToast("✓ Ratings saved!"); return; }
+  const code=(failed[0].err&&failed[0].err.code)||"";
+  const saved=list.length-failed.length;
+  if(code==="permission-denied"){
+    showToast("Not allowed to save domains for "+cls+". Ask the admin to check your class assignment.","err");
+  } else if(code==="unavailable"||/network|offline/i.test(String(failed[0].err))){
+    showToast("Network problem — check your internet and tap Save again.","err");
+  } else {
+    const names=failed.slice(0,3).map(f=>f.stu.lastName+" "+f.stu.firstName).join(", ");
+    showToast(`Saved ${saved}/${list.length}. Failed: ${names}${failed.length>3?"…":""} ${code?("("+code+")"):""}`,"err");
   }
-  catch(e){ showToast("Error saving ratings","err"); }
 }
 
 // ════════════════════════════════════════════
@@ -2092,6 +2113,31 @@ function autoPrincipalComment(avg){
 
 let currentReportStudentId=null;
 let currentReportAvg=0;
+function fmtGender(g){ g=String(g||"").trim(); const u=g.toUpperCase(); return u==="M"||u==="MALE"?"Male":u==="F"||u==="FEMALE"?"Female":g; }
+function fmtDob(d){ if(!d) return ""; const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:String(d); }
+function nameKey(n){ return String(n||"").toLowerCase().replace(/[^a-z\s]/g," ").split(/\s+/).filter(Boolean).sort().join(" "); }
+// Teachers save gender/DOB in the class Register. Admin-only student profiles may not have it,
+// so look it up in the register (current session first, then the others).
+async function getRegisterInfo(stu){
+  const out={gender:stu.gender||"",dob:stu.dob||""};
+  if(out.gender && out.dob) return out;
+  const sessions=[currentSession,...["2026/2027","2025/2026","2024/2025","2027/2028","2023/2024"].filter(x=>x!==currentSession)];
+  const key=nameKey(`${stu.lastName} ${stu.firstName}`);
+  for(const sess of sessions){
+    try{
+      const regId=String(stu.class).replace(/\s/g,"-")+"_"+sess.replace("/","-");
+      const snap=await db.collection("registers").doc(regId).get();
+      if(!snap.exists) continue;
+      const rows=snap.data().students||[];
+      const r=rows.find(x=>x.studentId===stu.id)||rows.find(x=>nameKey(x.name)===key);
+      if(!r) continue;
+      if(!out.gender && r.gender) out.gender=r.gender;
+      if(!out.dob && r.dob) out.dob=r.dob;
+      if(out.gender && out.dob) break;
+    }catch(e){ console.error("register lookup",e); }
+  }
+  return out;
+}
 async function viewReport(stuId){
   const stu=students.find(s=>s.id===stuId); if(!stu) return;
   currentReportStudentId=stuId;
@@ -2102,6 +2148,10 @@ async function viewReport(stuId){
   await loadResultsForClass(stu.class); // loads this student + classmates for position calc
   const data=resultsCache[resultDocId(stuId)];
   const dept=stu.department||"Sciences";
+  const regInfo=await getRegisterInfo(stu);
+  const rcGender=fmtGender(regInfo.gender);
+  const rcDob=fmtDob(regInfo.dob);
+  const rcAge=regInfo.dob?calcAgeFromDob(regInfo.dob):null;
   const subs=getSubs(stu.class,dept);
   const rows=subs.map(sub=>{
     const sc=data.subjects[sub]||{};
@@ -2206,7 +2256,11 @@ async function viewReport(stuId){
       <div style="display:flex;flex-wrap:wrap;border-bottom:1px solid var(--navy)">
         <div style="flex:2;min-width:180px;padding:6px 10px;border-right:1px solid var(--navy);font-size:15px"><b>NAME:</b> <span style="font-weight:700;text-decoration:underline;margin-left:4px">${stu.lastName} ${stu.firstName}</span></div>
         <div style="flex:1;min-width:110px;padding:6px 10px;border-right:1px solid var(--navy);font-size:15px"><b>CLASS:</b> <span style="font-weight:700;text-decoration:underline;margin-left:4px">${stu.class}</span></div>
-        <div style="flex:0.6;min-width:90px;padding:6px 10px;font-size:15px"><b>GENDER:</b> <span style="font-weight:700;text-decoration:underline;margin-left:4px">${stu.gender||"____"}</span></div>
+        <div style="flex:0.6;min-width:90px;padding:6px 10px;font-size:15px"><b>GENDER:</b> <span style="font-weight:700;text-decoration:underline;margin-left:4px">${rcGender||"____"}</span></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;border-bottom:1px solid var(--navy)">
+        <div style="flex:2;min-width:180px;padding:6px 10px;border-right:1px solid var(--navy);font-size:15px"><b>DATE OF BIRTH:</b> <span style="font-weight:700;text-decoration:underline;margin-left:4px">${rcDob||"____"}</span></div>
+        <div style="flex:1.6;min-width:110px;padding:6px 10px;font-size:15px"><b>AGE:</b> <span style="font-weight:700;text-decoration:underline;margin-left:4px">${rcAge!==null&&rcAge!==undefined?rcAge+" yrs":"____"}</span></div>
       </div>
       <div style="display:flex;flex-wrap:wrap;border-bottom:1px solid var(--navy)">
         <div style="flex:1.3;min-width:150px;padding:6px 10px;border-right:1px solid var(--navy);font-size:15px"><b>TERM:</b> <span style="font-weight:700;text-decoration:underline;margin-left:4px">${currentTerm}</span></div>
@@ -2520,7 +2574,7 @@ async function loadTeachers(){
       const roleBadge = (d.role==="admin"&&d.isSuperAdmin===true)
         ? '<span class="badge" style="background:#7C3AED;color:#fff">SUPER ADMIN</span>'
         : d.role==="admin"
-          ? `<span class="badge" style="background:var(--gold);color:var(--navy)">ADMIN${d.adminSection?" · "+d.adminSection.toUpperCase():" · FULL ACCESS"}</span>`
+          ? `<span class="badge" style="background:var(--gold);color:var(--navy)">ADMIN${d.adminSection?" · "+(d.adminSection==="nursery_primary"?"NURSERY + PRIMARY":d.adminSection.toUpperCase()):" · FULL ACCESS"}</span>`
           : "";
       card.innerHTML=`
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -2543,6 +2597,7 @@ async function loadTeachers(){
                 <option value="" ${!d.adminSection?"selected":""}>Full access (all classes)</option>
                 <option value="nursery" ${d.adminSection==="nursery"?"selected":""}>Nursery only (Busy Bee – Nursery 2)</option>
                 <option value="primary" ${d.adminSection==="primary"?"selected":""}>Primary only (Basic 1–6)</option>
+                <option value="nursery_primary" ${d.adminSection==="nursery_primary"?"selected":""}>Nursery + Primary (Busy Bee – Basic 6)</option>
                 <option value="secondary" ${d.adminSection==="secondary"?"selected":""}>Secondary only (Basic 7–9, SSS)</option>
               </select>
             </div>`:""}
@@ -2554,6 +2609,7 @@ async function loadTeachers(){
             ${d.status==="approved"&&d.role!=="admin"?`
               <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','nursery')">⭐ Make Nursery Admin</button>
               <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','primary')">⭐ Make Primary Admin</button>
+              <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','nursery_primary')">⭐ Make Nursery + Primary Admin</button>
               <button class="btn btn-gold btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','secondary')">⭐ Make Secondary Admin</button>
               <button class="btn btn-ghost btn-sm" onclick="setTeacherAdmin('${doc.id}',true,'${(d.name||d.email||"").replace(/'/g,"\\'")}','')">⭐ Make Full Admin</button>
             `:""}
@@ -2715,7 +2771,7 @@ async function setTeacherStatus(uid,status){
   catch(e){ showToast("Error updating account","err"); }
 }
 async function setTeacherAdmin(uid,makeAdmin,name,section){
-  const sectionLabel=section==="nursery"?"NURSERY ONLY (Busy Bee–Nursery 2)":section==="primary"?"PRIMARY ONLY (Basic 1–6)":section==="secondary"?"SECONDARY ONLY (Basic 7–9, SSS)":"FULL ACCESS (all classes)";
+  const sectionLabel=section==="nursery"?"NURSERY ONLY (Busy Bee–Nursery 2)":section==="primary"?"PRIMARY ONLY (Basic 1–6)":section==="nursery_primary"?"NURSERY + PRIMARY ONLY (Busy Bee–Basic 6)":section==="secondary"?"SECONDARY ONLY (Basic 7–9, SSS)":"FULL ACCESS (all classes)";
   const msg=makeAdmin
     ? `Make ${name} an ADMIN with ${sectionLabel}? ${section?"They will not be able to see or edit students, results, or report cards for classes outside this section.":"They will be able to manage students and results for every class."}`
     : `Remove admin access from ${name}? They will become a regular teacher again.`;
