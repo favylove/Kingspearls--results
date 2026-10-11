@@ -2346,7 +2346,9 @@ async function saveReportComments(){
   const btn=document.getElementById("save-comments-btn");
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   try{
-    await saveResultDoc(currentReportStudentId,{ctComment:data.ctComment,pcComment:data.pcComment});
+    const rs=students.find(x=>x.id===currentReportStudentId);
+    await saveResultDoc(currentReportStudentId,{ctComment:data.ctComment,pcComment:data.pcComment,
+      class:rs?rs.class:(data.class||""),term:currentTerm,session:currentSession,studentId:currentReportStudentId});
     showToast("✓ Comments saved!");
   }
   catch(e){ showToast("Error saving comments","err"); }
