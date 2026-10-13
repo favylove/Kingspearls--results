@@ -687,7 +687,7 @@ tr:nth-child(even) td{background:#F8FAFF;}
       <div class="fg"><label class="lbl">Class</label><select id="rc-cls" onchange="renderRcList()"><option value="">All Classes</option></select></div>
       <div class="fg"><label class="lbl">Search Name</label><input type="text" id="rc-q" placeholder="Type name…" oninput="renderRcList()"/></div>
     </div>
-    <div id="rc-list" style="display:flex;flex-wrap:wrap;gap:8px;max-height:230px;overflow-y:auto"></div>
+    <div id="rc-list" style="display:flex;flex-wrap:wrap;gap:8px;max-height:60vh;overflow-y:auto"></div>
   </div>
   <div id="rc-loading" class="card loading-row" style="display:none">Loading report…</div>
   <div id="rc-view" style="display:none">
@@ -1364,7 +1364,7 @@ function renderStudents(){
   const q=(document.getElementById("stu-q").value||"").toLowerCase();
   const fc=document.getElementById("stu-fc").value;
   const list=students.filter(s=>{
-    const mc=!fc||s.class===fc;
+    const mc=!fc||normCls(s.class)===normCls(fc);
     const mq=!q||`${s.firstName} ${s.lastName} ${s.id}`.toLowerCase().includes(q);
     return mc&&mq;
   });
@@ -2088,19 +2088,32 @@ async function saveAtt(){
 // ════════════════════════════════════════════
 function renderRcList(){
   let cls=document.getElementById("rc-cls").value;
-  if(currentUserProfile && !isAnyAdmin(currentUserProfile) && currentUserProfile.formTeacherClass){
-    cls=currentUserProfile.formTeacherClass; // form teachers can only ever browse their own class
-  }
-  const q=(document.getElementById("rc-q").value||"").toLowerCase();
-  const list=students.filter(s=>(!cls||s.class===cls)&&(!q||`${s.firstName} ${s.lastName}`.toLowerCase().includes(q)));
+  const p=currentUserProfile;
+  // form teachers can only ever browse their own class
+  if(p && !isAnyAdmin(p) && p.formTeacherClass){ cls=p.formTeacherClass; }
+  const q=(document.getElementById("rc-q").value||"").toLowerCase().trim();
   const wrap=document.getElementById("rc-list"); wrap.innerHTML="";
-  list.forEach(s=>{
+  const nc=normCls(cls);
+  const pool=nc?students.filter(s=>normCls(s.class)===nc):students;
+  const list=pool.filter(s=>!q||`${s.firstName} ${s.lastName} ${s.lastName} ${s.firstName}`.toLowerCase().includes(q));
+  // header line: how many names, and a hint
+  const head=document.createElement("div");
+  head.style.cssText="width:100%;font-size:12.5px;color:var(--slate);font-weight:600;margin-bottom:2px";
+  head.textContent=(cls?cls+" — ":"")+list.length+" student"+(list.length===1?"":"s")+(list.length?" · tap a name to open the report card":"");
+  wrap.appendChild(head);
+  list.forEach((s,i)=>{
     const btn=document.createElement("button");
     btn.style.cssText="background:var(--light);border:1px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;text-align:left;";
-    btn.innerHTML=`<div style="font-weight:700;color:var(--navy);font-size:14px">${s.lastName} ${s.firstName}</div><div style="font-size:11px;color:var(--slate)">${s.class}</div>`;
+    btn.innerHTML=`<div style="font-weight:700;color:var(--navy);font-size:14px">${i+1}. ${s.lastName} ${s.firstName}</div><div style="font-size:11px;color:var(--slate)">${s.class}</div>`;
     btn.onclick=()=>viewReport(s.id); wrap.appendChild(btn);
   });
-  if(!list.length) wrap.innerHTML=`<div style="color:var(--slate);font-size:14px;padding:10px">No students found.</div>`;
+  if(!list.length){
+    const seen=[...new Set(students.map(s=>s.class).filter(Boolean))].slice(0,12).join(", ");
+    const m=document.createElement("div");
+    m.style.cssText="color:var(--slate);font-size:14px;padding:10px";
+    m.textContent=cls?`No students found in ${cls}.`+(students.length?` (Classes that have students: ${seen}${seen?"":"none"})`:" The student list has not loaded — check your internet and refresh."):"No students found.";
+    wrap.appendChild(m);
+  }
 }
 function autoPrincipalComment(avg){
   if(avg>=80) return "An outstanding performance – Congratulations!";
@@ -2193,7 +2206,7 @@ async function viewReport(stuId){
   }).filter(v=>v!=null);
   const cumulativeAverage=termAvgs.length?(termAvgs.reduce((a,b)=>a+b,0)/termAvgs.length).toFixed(1):avg;
 
-  const classStu=students.filter(s=>s.class===stu.class);
+  const classStu=studentsInClass(stu.class);
   const classAvgs=classStu.map(s=>{
     const d=resultsCache[resultDocId(s.id)]||emptyResultData(s.id,s.class);
     const sr=getSubs(s.class).map(sub=>{const sc=d.subjects[sub]||{};return Number(sc.ca||0)+Number(sc.exam||0);}).filter(v=>v>0);
@@ -2822,7 +2835,7 @@ async function loadClassRegister(){
     // (avoids a Firestore compound where+orderBy query, which needs a manually
     // created composite index and otherwise fails silently into the catch below)
     if(registerRows.length===0){
-      students.filter(s=>s.class===cls).forEach(s=>{
+      studentsInClass(cls).forEach(s=>{
         registerRows.push({studentId:s.id,name:`${s.lastName} ${s.firstName}`,gender:"",dob:"",admNo:""});
       });
     }
