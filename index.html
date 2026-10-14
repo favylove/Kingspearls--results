@@ -1077,7 +1077,7 @@ async function resetPassword(){
 function doRegister(){
   if(!firebaseReady){ showToast("Firebase not configured yet.","err"); return; }
   const name=document.getElementById("reg-name").value.trim();
-  const email=document.getElementById("reg-email").value.trim();
+  const email=document.getElementById("reg-email").value.trim().toLowerCase();
   const pass=document.getElementById("reg-pass").value;
   const pass2=document.getElementById("reg-pass2").value;
   const errBox=document.getElementById("register-err");
@@ -1117,6 +1117,18 @@ async function onAuthChange(user){
       new Promise((_,reject)=>setTimeout(()=>reject(new Error("PROFILE_TIMEOUT")),15000))
     ]);
     if(!snap.exists){
+      // Login exists but the profile record is missing (e.g. it was never saved, or was
+      // removed). Recreate it as a PENDING teacher so the admin can approve it.
+      try{
+        const em=String(user.email||"").toLowerCase();
+        const nm=(user.displayName||em.split("@")[0]||"Teacher").slice(0,100);
+        await db.collection("users").doc(user.uid).set({
+          name:nm,email:em,role:"teacher",status:"pending",
+          createdAt:firebase.firestore.FieldValue.serverTimestamp()
+        });
+        currentUserProfile={uid:user.uid,name:nm,email:em,role:"teacher",status:"pending"};
+        showPendingScreen(); return;
+      }catch(createErr){ console.error("Could not recreate profile:",createErr); }
       await auth.signOut();
       const e=document.getElementById("login-err");
       e.textContent="Your login worked, but your school user profile was not found. Please contact the administrator."; e.style.display="block";
