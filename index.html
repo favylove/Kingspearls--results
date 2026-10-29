@@ -694,10 +694,13 @@ tr:nth-child(even) td{background:#F8FAFF;}
     <div class="btn-row no-print" style="margin-bottom:16px">
       <button class="btn btn-ghost btn-sm" onclick="closeReport()">← Back</button>
       <button class="btn btn-primary btn-sm" id="save-comments-btn" onclick="saveReportComments()">💾 Save Comments</button>
+      <button class="btn btn-ghost btn-sm" id="rc-fit-btn" onclick="toggleReportFit()">🔍 Full size</button>
       <button class="btn btn-primary btn-sm" id="download-pdf-btn" onclick="downloadReportPDF()">⬇️ Download PDF</button>
     </div>
+    <div id="rc-fit" style="width:100%;overflow-x:auto">
     <div id="rc-inner" style="background:linear-gradient(160deg,#DCEBFF,#BFDBFE);border-radius:14px;border:2px solid var(--border);
       box-shadow:0 4px 20px rgba(13,27,62,.1);overflow:hidden;max-width:900px;margin:0 auto"></div>
+    </div>
   </div>
 </div>
 
@@ -919,7 +922,10 @@ const CLASSES=["Busy Bee",
   "Basic 7A","Basic 7B","Basic 8A","Basic 8B","Basic 9A","Basic 9B",
   "SSS 1A","SSS 1B","SSS 2A","SSS 2B","SSS 3A","SSS 3B"];
 const SUBJECTS={
-  nursery:["Number Work","Letter Work","Verbal Reasoning","Basic Science","Social Habits","Arts & Craft","Physical Education"],
+  busyBee:["Phonics","Numeracy","Question Games","Creative Art","Rhymes"],
+  preNursery:["Numeracy","Phonics","Social Habit","Health Habit","Question Games","Science","CRK"],
+  nursery1:["Numeracy","Literacy","Phonics","Quantitative","Verbal","Science","Health","Social Studies","CRK","Computer","Diction","Rhymes"],
+  nursery2:["Letter Concept","Number Concept","Verbal","Quantitative","Phonics","Diction","Computer","Social Habit","Science Habit","Health Habit","CRK","Vocational"],
   lowerPrimary:["Mathematics","English Language","Basic Science","Basic Digital Literacy","Creative Arts","Quantitative Reasoning","Verbal Reasoning","Social Studies","Physical and Health Education","Christian Religious Studies","Diction","Literature","Vocational Aptitude","Spellings","Civic Education","Calligraphy","Etiquette","Phonics"],
   upperPrimary:["Mathematics","English Language","Basic Science","Basic Digital Technology","Creative Arts","Quantitative Reasoning","Verbal Reasoning","Social Studies","Physical and Health Education","Christian Religious Study","Diction","Literature","Vocational Aptitude","Spellings","Civic Education","Home Economics","French","Creative Writing","Agricultural Science"],
   basic:["Mathematics","English Studies","Literature in English","Christian Religious Studies","Business Studies","Intermediate Science","Physical Health Education","Social and Citizenship Studies","Computer Hardware & GSM Repairs","Fashion Design & Garment Making","Cultural and Creative Arts","Digital Technologies","French Language","Igbo Language","Nigerian History","Home Economics","Agricultural Science","Basic Technology","Basic Science"],
@@ -933,7 +939,12 @@ const SSS_DEPARTMENTS=["Sciences","Humanities","Business"];
 function getSubs(cls, dept){
   if(!cls) return [];
   const c=cls.toLowerCase();
-  if(c.includes("busy bee")||c.includes("pre nursery")||c.includes("nursery")) return SUBJECTS.nursery;
+  if(c.includes("busy bee")) return SUBJECTS.busyBee;
+  if(c.includes("pre nursery")||c.includes("pre-nursery")) return SUBJECTS.preNursery;
+  if(c.includes("nursery")){
+    const nn=c.match(/nursery\s*(\d+)/);
+    return (nn&&nn[1]==="2")?SUBJECTS.nursery2:SUBJECTS.nursery1;
+  }
   const basicNum=c.match(/basic\s*(\d+)/);
   if(basicNum){
     const n=parseInt(basicNum[1],10);
@@ -2362,6 +2373,7 @@ async function viewReport(stuId){
 
   document.getElementById("rc-loading").style.display="none";
   document.getElementById("rc-view").style.display="block";
+  fitReport();
 }
 async function saveReportComments(){
   if(!currentReportStudentId) return;
@@ -2379,6 +2391,26 @@ async function saveReportComments(){
   catch(e){ showToast("Error saving comments","err"); }
   btn.disabled=false; btn.innerHTML="💾 Save Comments";
 }
+let reportFit=true; // on small screens, show the whole report card shrunk to fit — no side scrolling
+function fitReport(){
+  const wrap=document.getElementById("rc-fit"), inner=document.getElementById("rc-inner"), btn=document.getElementById("rc-fit-btn");
+  if(!wrap||!inner) return;
+  const t=inner.querySelector(".rc-title");
+  const W=794;
+  const avail=wrap.clientWidth||window.innerWidth;
+  if(reportFit && avail<W){
+    inner.style.width=W+"px"; inner.style.maxWidth="none"; inner.style.margin="0";
+    inner.style.zoom=String(Math.max(0.3,avail/W));
+    if(t){ t.style.setProperty("font-size","30px","important"); t.style.setProperty("white-space","normal","important"); }
+    if(btn) btn.textContent="🔍 Full size";
+  }else{
+    inner.style.width=""; inner.style.maxWidth="900px"; inner.style.margin="0 auto"; inner.style.zoom="";
+    if(t){ t.style.removeProperty("font-size"); t.style.removeProperty("white-space"); }
+    if(btn) btn.textContent="📱 Fit to screen";
+  }
+}
+function toggleReportFit(){ reportFit=!reportFit; fitReport(); }
+window.addEventListener("resize",()=>{ if(document.getElementById("rc-view")?.style.display==="block") fitReport(); });
 function closeReport(){
   document.getElementById("rc-selector").style.display="block";
   document.getElementById("rc-view").style.display="none";
