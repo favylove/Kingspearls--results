@@ -989,6 +989,10 @@ function allowedClassesForCurrentUser(){
   if(p && p.role==="admin" && !p.isSuperAdmin && p.adminSection){
     return CLASSES.filter(c=>sectionAllows(p.adminSection,c));
   }
+  if(p && !isAnyAdmin(p) && teacherClasses){
+    const ok=new Set(teacherClasses.map(normCls));
+    return CLASSES.filter(c=>ok.has(normCls(c)));
+  }
   return CLASSES;
 }
 function isNurseryOrPrimary(cls){
@@ -1183,6 +1187,7 @@ async function showAppScreen(){
   populateSelects();
   await loadSettings();
   await loadStudents();
+  populateSelects(); // teachers now only see their own classes
   updateDashboard();
 }
 
@@ -1260,7 +1265,7 @@ async function loadSettings(){
     document.getElementById("d-closing").value=currentClosingDate;
     document.getElementById("d-resumption").value=currentResumptionDate;
     renderScoreLockToggles();
-  }catch(e){ console.error(e); }
+  }catch(e){ console.error(e); showDbBanner(dbErrText(e)); }
 }
 async function setSession(v){
   currentSession=v; updateDashboard();
@@ -1370,16 +1375,70 @@ async function saveResultDoc(studentId,fields){
 // ════════════════════════════════════════════
 //  STUDENTS
 // ════════════════════════════════════════════
+// ── Friendly database problem messages (so teachers/admin see the REAL reason) ──
+function dbErrText(e){
+  const code=(e&&e.code)||"";
+  if(code==="resource-exhausted") return "The school database has reached today's free usage limit. Please tell the admin. It resets each morning, or the admin can upgrade the Firebase plan.";
+  if(code==="permission-denied") return "The database refused access (permission-denied). Please tell the admin: your account may not be approved, or the Firebase rules need checking.";
+  if(code==="unavailable"||/network|offline|timeout/i.test(String(e&&e.message))) return "Network problem — check your internet and refresh.";
+  return "Could not load school data"+(code?(" ("+code+")"):"")+". Please refresh, and tell the admin if it continues.";
+}
+function showDbBanner(msg){
+  try{
+    let b=document.getElementById("db-banner");
+    if(!b){
+      b=document.createElement("div"); b.id="db-banner";
+      b.style.cssText="position:fixed;left:0;right:0;top:0;z-index:99999;background:#B91C1C;color:#fff;padding:10px 14px;font-size:13px;font-weight:700;line-height:1.35;display:flex;gap:10px;align-items:flex-start";
+      b.innerHTML='<div id="db-banner-msg" style="flex:1"></div><button type="button" style="border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:2px 9px;font-size:16px;cursor:pointer" onclick="this.parentNode.remove()">×</button>';
+      document.body.appendChild(b);
+    }
+    document.getElementById("db-banner-msg").textContent="⚠️ "+msg;
+  }catch(_){}
+}
+let teacherClasses=null; // classes a (non-admin) teacher is allowed to work in, once known
+
 async function loadStudents(){
   try{
+    const p=currentUserProfile;
+    const isTeacherOnly=p && !isAnyAdmin(p);
+    if(isTeacherOnly){
+      // Teachers only need THEIR classes (assigned subjects + form class). Reading just those
+      // keeps database usage low instead of downloading every student in the school each login.
+      const set=new Set();
+      if(p.formTeacherClass) set.add(p.formTeacherClass);
+      const asn=await db.collection("assignments").where("teacherId","==",p.uid).get();
+      asn.forEach(d=>{ const c=d.data().class; if(c && (d.data().subjects||[]).length) set.add(c); });
+      teacherClasses=[...set];
+      let got=[];
+      for(let i=0;i<teacherClasses.length;i+=10){
+        const chunk=teacherClasses.slice(i,i+10);
+        const snap=await db.collection("students").where("class","in",chunk).get();
+        snap.forEach(d=>got.push({id:d.id,...d.data()}));
+      }
+      // If any class came back empty, a student's class may be spelled slightly differently:
+      // do a one-time full load and match ignoring capitals/spaces.
+      const have=new Set(got.map(x=>normCls(x.class)));
+      const missing=teacherClasses.filter(c=>!have.has(normCls(c)));
+      if(missing.length){
+        const snap=await db.collection("students").get();
+        const want=new Set(teacherClasses.map(normCls));
+        got=snap.docs.map(d=>({id:d.id,...d.data()})).filter(x=>want.has(normCls(x.class)));
+      }
+      got.sort((x,y)=>String(x.lastName||"").localeCompare(String(y.lastName||""))||String(x.firstName||"").localeCompare(String(y.firstName||"")));
+      students=got;
+      return;
+    }
     const snap=await db.collection("students").orderBy("lastName").get();
     let all=snap.docs.map(d=>({id:d.id,...d.data()}));
-    const p=currentUserProfile;
     if(p && p.role==="admin" && !p.isSuperAdmin && p.adminSection){
       all=all.filter(s=>sectionAllows(p.adminSection,s.class));
     }
     students=all;
-  }catch(e){ console.error(e); students=[]; }
+  }catch(e){
+    console.error("loadStudents failed:",e);
+    students=[];
+    showDbBanner(dbErrText(e));
+  }
 }
 function renderStudents(){
   document.getElementById("students-loading").style.display="none";
@@ -2820,7 +2879,7 @@ async function getAssignedSubjects(cls){
     const snap=await db.collection("assignments").doc(assignmentDocId(currentUserProfile.uid,cls)).get();
     if(!snap.exists) return []; // no assignment = no subjects
     return snap.data().subjects||[];
-  }catch(e){return null;}
+  }catch(e){ console.error(e); showDbBanner(dbErrText(e)); return []; }
 }
 async function setTeacherStatus(uid,status){
   try{ await db.collection("users").doc(uid).update({status}); showToast("✓ Updated!"); loadTeachers(); }
